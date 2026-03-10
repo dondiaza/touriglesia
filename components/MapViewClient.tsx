@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { divIcon } from "leaflet";
+import { divIcon, type Marker as LeafletMarker } from "leaflet";
 import {
   CircleMarker,
   MapContainer,
@@ -30,6 +30,7 @@ type MapViewClientProps = {
   userLocation?: UserLocation | null;
   onAddSuggestionToRoute?: (suggestedPlace: SuggestedPlace) => void;
   onRemovePoint?: (pointId: string) => void;
+  onMovePoint?: (pointId: string, lat: number, lon: number) => void;
   onMapClick: (lat: number, lon: number) => void;
 };
 
@@ -47,6 +48,7 @@ export default function MapViewClient({
   userLocation = null,
   onAddSuggestionToRoute,
   onRemovePoint,
+  onMovePoint,
   onMapClick
 }: MapViewClientProps) {
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
@@ -147,11 +149,21 @@ export default function MapViewClient({
 
         {points.map((point) => (
           <Marker
+            draggable={Boolean(onMovePoint)}
             eventHandlers={{
               click() {
                 setSelectedPointId(point.id);
                 setSelectedSuggestionId(null);
                 setPendingMapPoint(null);
+              },
+              dragend(event) {
+                if (!onMovePoint) {
+                  return;
+                }
+
+                const marker = event.target as LeafletMarker;
+                const { lat, lng } = marker.getLatLng();
+                onMovePoint(point.id, lat, lng);
               }
             }}
             icon={createPointIcon(point)}
