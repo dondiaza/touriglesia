@@ -13,6 +13,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@vis.gl/react-google-maps": "^1.7.1",
+    "@vercel/postgres": "^0.10.0",
     "leaflet": "1.9.4",
     "mapbox-gl": "^3.6.0",
     "maplibre-gl": "^4.7.1",
