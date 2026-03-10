@@ -1,5 +1,11 @@
-import { DEFAULT_FOCUS_ZOOM } from "./constants";
-import type { MapFocus, MapPoint } from "./types";
+import { DEFAULT_FOCUS_ZOOM, TRAVEL_MODE_LABELS } from "./constants";
+import type {
+  MapFocus,
+  MapPoint,
+  OrderedStop,
+  RouteSummary,
+  TravelMode
+} from "./types";
 
 export function cn(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -48,6 +54,10 @@ export function formatCoordinates(lat: number, lon: number) {
   return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 }
 
+export function formatTravelMode(travelMode: TravelMode) {
+  return TRAVEL_MODE_LABELS[travelMode];
+}
+
 export function buildFocusTarget(lat: number, lon: number, zoom = DEFAULT_FOCUS_ZOOM): MapFocus {
   return {
     lat,
@@ -81,6 +91,78 @@ export function sortPointsForDisplay(points: MapPoint[]) {
 
 export function buildPointIndexLookup(points: MapPoint[]) {
   return new Map(points.map((point, index) => [point.id, index]));
+}
+
+export function applyStopsToPoints(points: MapPoint[], orderedStops: OrderedStop[]) {
+  const stopLookup = new Map(orderedStops.map((stop) => [stop.pointId, stop]));
+
+  return points.map((point) => {
+    const stop = stopLookup.get(point.id);
+
+    if (!stop) {
+      return stripRouteMetadata(point);
+    }
+
+    return {
+      ...point,
+      routeIndex: stop.routeIndex,
+      distanceFromPrevious: stop.distanceFromPrevious,
+      durationFromPrevious: stop.durationFromPrevious
+    };
+  });
+}
+
+export function reorderItems<T>(items: T[], fromIndex: number, toIndex: number) {
+  const nextItems = items.slice();
+  const [movedItem] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, movedItem);
+  return nextItems;
+}
+
+export function toIsoDate(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+export function shiftIsoDate(isoDate: string, days: number) {
+  const baseDate = new Date(`${isoDate}T00:00:00`);
+  baseDate.setDate(baseDate.getDate() + days);
+  return toIsoDate(baseDate);
+}
+
+export function formatDateLabel(isoDate: string) {
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric"
+  }).format(new Date(`${isoDate}T00:00:00`));
+}
+
+export function getPointDisplayName(point: MapPoint) {
+  return point.name || `Punto ${typeof point.routeIndex === "number" ? point.routeIndex + 1 : point.createdOrder}`;
+}
+
+export function createStableId(prefix: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function buildHistoryLabel(points: MapPoint[], summary: RouteSummary) {
+  const orderedPoints = summary.pointOrder
+    .map((pointId) => points.find((point) => point.id === pointId))
+    .filter(Boolean) as MapPoint[];
+
+  const firstPoint = orderedPoints[0];
+  const lastPoint = orderedPoints[orderedPoints.length - 1];
+  const routeMode = formatTravelMode(summary.travelMode);
+
+  if (!firstPoint || !lastPoint) {
+    return `Ruta ${routeMode}`;
+  }
+
+  return `${firstPoint.name || "Inicio"} -> ${lastPoint.name || "Fin"} (${routeMode})`;
 }
 
 export function haversineMeters(
