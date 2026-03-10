@@ -1,4 +1,4 @@
-import { sql } from "@vercel/postgres";
+import { neon } from "@neondatabase/serverless";
 import { NextRequest, NextResponse } from "next/server";
 
 import { normalizeUserError } from "@/lib/errors";
@@ -22,8 +22,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const stateKey = normalizeStateKey(request.nextUrl.searchParams.get("key"));
+  const sql = getNeonClient();
 
-  if (!hasPostgresConfig()) {
+  if (!sql) {
     return NextResponse.json(
       {
         message:
@@ -37,14 +38,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    await ensureStateTable();
-    const result = await sql<PersistedStateRow>`
+    await ensureStateTable(sql);
+    const result = (await sql`
       SELECT state_key, data, updated_at
       FROM touriglesia_state
       WHERE state_key = ${stateKey}
       LIMIT 1
-    `;
-    const row = result.rows[0];
+    `) as PersistedStateRow[];
+    const row = result[0];
 
     return NextResponse.json(
       {
@@ -75,7 +76,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!hasPostgresConfig()) {
+  const sql = getNeonClient();
+
+  if (!sql) {
     return NextResponse.json(
       {
         message:
@@ -116,7 +119,7 @@ export async function POST(request: NextRequest) {
   const stateKey = normalizeStateKey(body.key);
 
   try {
-    await ensureStateTable();
+    await ensureStateTable(sql);
     const serializedState = JSON.stringify(body.data);
 
     await sql`
@@ -156,7 +159,7 @@ export async function POST(request: NextRequest) {
 }
 
 function hasPostgresConfig() {
-  return Boolean(process.env.POSTGRES_URL || process.env.DATABASE_URL);
+  return Boolean(getDatabaseUrl());
 }
 
 function normalizeStateKey(value: string | null | undefined) {
@@ -169,7 +172,27 @@ function normalizeStateKey(value: string | null | undefined) {
   return trimmed.slice(0, 80);
 }
 
-async function ensureStateTable() {
+function getDatabaseUrl() {
+  return (
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.DATABASE_URL_UNPOOLED ||
+    process.env.POSTGRES_URL_NON_POOLING ||
+    null
+  );
+}
+
+function getNeonClient() {
+  const databaseUrl = getDatabaseUrl();
+
+  if (!databaseUrl) {
+    return null;
+  }
+
+  return neon(databaseUrl);
+}
+
+async function ensureStateTable(sql: any) {
   await sql`
     CREATE TABLE IF NOT EXISTS touriglesia_state (
       state_key TEXT PRIMARY KEY,
