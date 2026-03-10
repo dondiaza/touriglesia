@@ -12,7 +12,7 @@ import {
 } from "react-leaflet";
 
 import { DEFAULT_MAP_ZOOM, SEVILLE_CENTER } from "@/lib/constants";
-import type { MapFocus, MapPoint } from "@/lib/types";
+import type { MapFocus, MapPoint, SuggestedPlace } from "@/lib/types";
 import {
   formatCoordinates,
   formatDistance,
@@ -25,6 +25,9 @@ type MapViewClientProps = {
   mapFocus: MapFocus | null;
   routeGeometry: Array<[number, number]>;
   isResolvingMapPoint?: boolean;
+  suggestionPoints?: SuggestedPlace[];
+  onAddSuggestionToRoute?: (suggestedPlace: SuggestedPlace) => void;
+  onRemovePoint?: (pointId: string) => void;
   onMapClick: (lat: number, lon: number) => void;
 };
 
@@ -38,14 +41,23 @@ export default function MapViewClient({
   mapFocus,
   routeGeometry,
   isResolvingMapPoint = false,
+  suggestionPoints = [],
+  onAddSuggestionToRoute,
+  onRemovePoint,
   onMapClick
 }: MapViewClientProps) {
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
   const [pendingMapPoint, setPendingMapPoint] = useState<PendingMapPoint | null>(null);
 
   const selectedPoint = useMemo(
     () => points.find((point) => point.id === selectedPointId) ?? null,
     [points, selectedPointId]
+  );
+
+  const selectedSuggestion = useMemo(
+    () => suggestionPoints.find((suggestion) => suggestion.id === selectedSuggestionId) ?? null,
+    [suggestionPoints, selectedSuggestionId]
   );
 
   useEffect(() => {
@@ -54,8 +66,15 @@ export default function MapViewClient({
     }
   }, [points, selectedPointId]);
 
+  useEffect(() => {
+    if (selectedSuggestionId && !suggestionPoints.some((item) => item.id === selectedSuggestionId)) {
+      setSelectedSuggestionId(null);
+    }
+  }, [selectedSuggestionId, suggestionPoints]);
+
   function handleMapSelect(lat: number, lon: number) {
     setSelectedPointId(null);
+    setSelectedSuggestionId(null);
     setPendingMapPoint({ lat, lon });
   }
 
@@ -67,6 +86,37 @@ export default function MapViewClient({
     onMapClick(pendingMapPoint.lat, pendingMapPoint.lon);
     setPendingMapPoint(null);
   }
+
+  function handleDeleteSelectedPoint() {
+    if (!selectedPoint || !onRemovePoint) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Eliminar "${getPointDisplayName(selectedPoint)}"?`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    onRemovePoint(selectedPoint.id);
+    setSelectedPointId(null);
+  }
+
+  function handleAddSuggestion() {
+    if (!selectedSuggestion || !onAddSuggestionToRoute) {
+      return;
+    }
+
+    onAddSuggestionToRoute(selectedSuggestion);
+  }
+
+  const suggestionAlreadyInRoute = selectedSuggestion
+    ? points.some(
+        (point) =>
+          Math.abs(point.lat - selectedSuggestion.lat) < 0.00005 &&
+          Math.abs(point.lon - selectedSuggestion.lon) < 0.00005
+      )
+    : false;
 
   return (
     <div className="relative h-[50vh] min-h-[420px] overflow-hidden rounded-3xl border border-[var(--panel-border)] shadow-[var(--shadow)] lg:h-[calc(100vh-8rem)]">
@@ -96,12 +146,28 @@ export default function MapViewClient({
             eventHandlers={{
               click() {
                 setSelectedPointId(point.id);
+                setSelectedSuggestionId(null);
                 setPendingMapPoint(null);
               }
             }}
             icon={createPointIcon(point)}
             key={point.id}
             position={[point.lat, point.lon]}
+          />
+        ))}
+
+        {suggestionPoints.map((suggestion) => (
+          <Marker
+            eventHandlers={{
+              click() {
+                setSelectedSuggestionId(suggestion.id);
+                setSelectedPointId(null);
+                setPendingMapPoint(null);
+              }
+            }}
+            icon={createSuggestionIcon(suggestion)}
+            key={suggestion.id}
+            position={[suggestion.lat, suggestion.lon]}
           />
         ))}
       </MapContainer>
@@ -149,7 +215,7 @@ export default function MapViewClient({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
-                  Preview del punto
+                  Punto de ruta
                 </p>
                 <h3 className="mt-1 text-lg font-semibold text-slate-900">
                   {getPointDisplayName(selectedPoint)}
@@ -179,6 +245,59 @@ export default function MapViewClient({
                 </p>
               ) : null}
             </div>
+
+            {onRemovePoint ? (
+              <div className="mt-3">
+                <button
+                  className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                  onClick={handleDeleteSelectedPoint}
+                  type="button"
+                >
+                  Eliminar punto
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {selectedSuggestion ? (
+        <div className="pointer-events-none absolute right-4 top-4 z-[500] max-w-sm">
+          <div className="pointer-events-auto rounded-3xl border border-white/80 bg-white/95 p-4 shadow-xl backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--warm)]">
+                  Sugerencia
+                </p>
+                <h3 className="mt-1 text-lg font-semibold text-slate-900">{selectedSuggestion.name}</h3>
+              </div>
+              <button
+                className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                onClick={() => setSelectedSuggestionId(null)}
+                type="button"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+              {selectedSuggestion.address ? <p>{selectedSuggestion.address}</p> : null}
+              {selectedSuggestion.description ? <p>{selectedSuggestion.description}</p> : null}
+              <p>Coords: {formatCoordinates(selectedSuggestion.lat, selectedSuggestion.lon)}</p>
+            </div>
+
+            {onAddSuggestionToRoute ? (
+              <div className="mt-3">
+                <button
+                  className="rounded-2xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={suggestionAlreadyInRoute}
+                  onClick={handleAddSuggestion}
+                  type="button"
+                >
+                  {suggestionAlreadyInRoute ? "Ya esta en ruta" : "Anadir a ruta"}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -264,6 +383,19 @@ function createPointIcon(point: MapPoint) {
       : '<span class="tour-marker__bubble tour-marker__bubble--plain"></span>',
     iconSize: [38, 38],
     iconAnchor: [19, 19],
+    popupAnchor: [0, -14]
+  });
+}
+
+function createSuggestionIcon(suggestion: SuggestedPlace) {
+  const categoryLetter =
+    suggestion.category === "iglesia" ? "I" : suggestion.category === "cofrade" ? "C" : "B";
+
+  return divIcon({
+    className: "tour-marker",
+    html: `<span class="tour-marker__bubble tour-marker__bubble--suggested">${categoryLetter}</span>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
     popupAnchor: [0, -14]
   });
 }
