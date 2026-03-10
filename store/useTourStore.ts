@@ -10,18 +10,22 @@ import {
 } from "@/lib/constants";
 import { buildDemoPointDrafts } from "@/lib/demo";
 import type {
+  CommunityPlace,
   MapFocus,
   MapPoint,
   OrderedStop,
   PointDraft,
   RouteHistoryEntry,
   RouteSummary,
-  TravelMode
+  SuggestedPlaceCategory,
+  TravelMode,
+  UserLocation
 } from "@/lib/types";
 import {
   applyStopsToPoints,
   buildFocusTarget,
   clampPointName,
+  createStableId,
   sortPointsForDisplay,
   stripRouteMetadata
 } from "@/lib/utils";
@@ -31,17 +35,31 @@ type AddPointResult = {
   error?: string;
 };
 
+type ShareCommunityPlaceInput = {
+  name: string;
+  lat: number;
+  lon: number;
+  address?: string;
+  description?: string;
+  category?: SuggestedPlaceCategory;
+};
+
 type TourState = {
   points: MapPoint[];
   orderedStops: OrderedStop[];
   routeSummary: RouteSummary | null;
   routeHistory: RouteHistoryEntry[];
   travelMode: TravelMode;
+  userLocation: UserLocation | null;
+  communityPlaces: CommunityPlace[];
+  activeStopIndex: number;
   mapFocus: MapFocus | null;
   notice: string | null;
   nextPointOrder: number;
   setNotice: (notice: string | null) => void;
   setTravelMode: (travelMode: TravelMode) => void;
+  setUserLocation: (location: UserLocation) => void;
+  setActiveStopIndex: (index: number) => void;
   addPoint: (point: PointDraft) => AddPointResult;
   updatePointName: (id: string, name: string) => void;
   removePoint: (id: string) => void;
@@ -58,6 +76,8 @@ type TourState = {
   saveRouteToHistory: (entry: RouteHistoryEntry) => void;
   removeHistoryEntry: (id: string) => void;
   restoreRouteFromHistory: (id: string) => void;
+  shareCommunityPlace: (input: ShareCommunityPlaceInput) => void;
+  supportCommunityPlace: (id: string) => void;
 };
 
 export const useTourStore = create<TourState>()(
@@ -68,6 +88,9 @@ export const useTourStore = create<TourState>()(
       routeSummary: null,
       routeHistory: [],
       travelMode: DEFAULT_TRAVEL_MODE,
+      userLocation: null,
+      communityPlaces: [],
+      activeStopIndex: 0,
       mapFocus: null,
       notice: null,
       nextPointOrder: 1,
@@ -81,6 +104,25 @@ export const useTourStore = create<TourState>()(
       setTravelMode(travelMode) {
         set({
           travelMode
+        });
+      },
+
+      setUserLocation(userLocation) {
+        set((state) => {
+          if (state.points.length > 0 || state.routeSummary) {
+            return { userLocation };
+          }
+
+          return {
+            userLocation,
+            mapFocus: buildFocusTarget(userLocation.lat, userLocation.lon, 14)
+          };
+        });
+      },
+
+      setActiveStopIndex(activeStopIndex) {
+        set({
+          activeStopIndex
         });
       },
 
@@ -110,6 +152,7 @@ export const useTourStore = create<TourState>()(
           points: [...points.map(stripRouteMetadata), nextPoint],
           orderedStops: [],
           routeSummary: null,
+          activeStopIndex: 0,
           mapFocus: buildFocusTarget(nextPoint.lat, nextPoint.lon),
           notice: null,
           nextPointOrder: nextPointOrder + 1
@@ -140,6 +183,7 @@ export const useTourStore = create<TourState>()(
             .map(stripRouteMetadata),
           orderedStops: [],
           routeSummary: null,
+          activeStopIndex: 0,
           notice: null
         }));
       },
@@ -149,7 +193,8 @@ export const useTourStore = create<TourState>()(
           points: [],
           orderedStops: [],
           routeSummary: null,
-          mapFocus: null,
+          activeStopIndex: 0,
+          mapFocus: state.userLocation ? buildFocusTarget(state.userLocation.lat, state.userLocation.lon, 14) : null,
           notice: null,
           nextPointOrder: 1,
           travelMode: state.travelMode
@@ -161,6 +206,7 @@ export const useTourStore = create<TourState>()(
           points: state.points.map(stripRouteMetadata),
           orderedStops: [],
           routeSummary: null,
+          activeStopIndex: 0,
           notice
         }));
       },
@@ -193,6 +239,7 @@ export const useTourStore = create<TourState>()(
           })),
           orderedStops: [],
           routeSummary: null,
+          activeStopIndex: 0,
           mapFocus: buildFocusTarget(drafts[0].lat, drafts[0].lon),
           notice: null,
           nextPointOrder: drafts.length + 1
@@ -204,6 +251,7 @@ export const useTourStore = create<TourState>()(
           points: pointsSnapshot ?? applyStopsToPoints(state.points, orderedStops),
           orderedStops,
           routeSummary: summary,
+          activeStopIndex: 0,
           notice: null
         }));
       },
@@ -243,11 +291,69 @@ export const useTourStore = create<TourState>()(
             ...entry.routeSummary,
             travelMode: restoredTravelMode
           },
+          activeStopIndex: 0,
           travelMode: restoredTravelMode,
           mapFocus: firstPoint ? buildFocusTarget(firstPoint.lat, firstPoint.lon) : null,
           notice: "Ruta recuperada desde el historico.",
           nextPointOrder
         });
+      },
+
+      shareCommunityPlace(input) {
+        set((state) => {
+          const match = state.communityPlaces.find(
+            (place) =>
+              place.name.toLowerCase() === input.name.toLowerCase() &&
+              Math.abs(place.lat - input.lat) < 0.00005 &&
+              Math.abs(place.lon - input.lon) < 0.00005
+          );
+
+          if (match) {
+            return {
+              communityPlaces: state.communityPlaces.map((place) =>
+                place.id === match.id
+                  ? {
+                      ...place,
+                      votes: place.votes + 1
+                    }
+                  : place
+              ),
+              notice: "El sitio ya existia en comunidad. Se ha sumado un apoyo."
+            };
+          }
+
+          const nextPlace: CommunityPlace = {
+            id: createStableId("community"),
+            name: clampPointName(input.name, "Sitio compartido"),
+            category: input.category || "cofrade",
+            lat: input.lat,
+            lon: input.lon,
+            address: input.address,
+            description: input.description,
+            votes: 1,
+            createdAt: new Date().toISOString()
+          };
+
+          return {
+            communityPlaces: [nextPlace, ...state.communityPlaces],
+            notice: "Sitio compartido en comunidad."
+          };
+        });
+      },
+
+      supportCommunityPlace(id) {
+        set((state) => ({
+          communityPlaces: state.communityPlaces
+            .map((place) =>
+              place.id === id
+                ? {
+                    ...place,
+                    votes: place.votes + 1
+                  }
+                : place
+            )
+            .sort((left, right) => right.votes - left.votes)
+        }));
       }
     }),
     {
@@ -255,7 +361,9 @@ export const useTourStore = create<TourState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         routeHistory: state.routeHistory,
-        travelMode: state.travelMode
+        travelMode: state.travelMode,
+        userLocation: state.userLocation,
+        communityPlaces: state.communityPlaces
       })
     }
   )
