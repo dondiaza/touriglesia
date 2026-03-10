@@ -1,4 +1,5 @@
 import { COFRADE_NEWS_QUERY, GDELT_BASE_URL } from "./constants";
+import { normalizeUserError } from "./errors";
 import type { DailyNewsDigest, NewsArticle } from "./types";
 import { formatDateLabel } from "./utils";
 
@@ -14,9 +15,21 @@ export async function fetchDailyCofradiaDigest(isoDate: string): Promise<DailyNe
   const compactDate = isoDate.replaceAll("-", "");
   const query = encodeURIComponent(`(${COFRADE_NEWS_QUERY}) sourceCountry:ES`);
   const url = `${GDELT_BASE_URL}?query=${query}&mode=ArtList&format=json&maxrecords=10&sort=datedesc&startdatetime=${compactDate}000000&enddatetime=${compactDate}235959`;
-  const response = await fetch(url, {
-    cache: "no-store"
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      cache: "no-store"
+    });
+  } catch (error) {
+    throw new Error(
+      normalizeUserError(
+        error,
+        "No se pudieron cargar las noticias cofrades del dia seleccionado.",
+        "No se pudo conectar con el servicio publico de noticias."
+      )
+    );
+  }
 
   if (!response.ok) {
     throw new Error("No se pudieron cargar las noticias cofrades del dia seleccionado.");
