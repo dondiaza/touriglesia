@@ -81,28 +81,28 @@ store/
 - Busqueda con autocompletar simple y prioridad para resultados cofrades y eclesiasticos
 - Atajos de busqueda rapida: Iglesia, Parroquia, Hermandad, Capilla y Basilica
 - Alta de puntos desde resultados de busqueda
-- Alta de puntos tocando o haciendo click en el mapa en desktop y mobile
+- Alta de puntos tocando o haciendo click en el mapa en desktop y mobile, con confirmacion previa para evitar misclick
 - Reverse geocoding para nombrar mejor los puntos anadidos desde el mapa
 - Edicion de nombre, centrado y eliminacion de puntos
 - Limite de 25 puntos
 - Selector de modo de viaje: a pie por defecto o coche
 - Generacion de ruta eficiente con matriz OSRM + nearest neighbor + 2-opt
 - Reordenacion manual de la ruta generada con recalculo inmediato
-- Historico local de rutas creadas y reajustadas
+- Historico local de rutas creadas y reajustadas en una pestana dedicada
 - Marcadores renumerados segun el orden final
 - Preview flotante al pulsar un marcador del mapa
 - Polilinea del recorrido
-- Resumen de distancia, tiempo y tramos
+- Resumen principal con distancia/tiempo y guia por calles (giros, pasos y distancia de cada instruccion)
 - Pestaña de sugerencias con resumen diario de noticias cofrades y navegacion por fechas
 - Boton demo Sevilla y boton limpiar
 
 ## Como funciona el calculo de ruta
 
 1. Se construye una matriz de tiempos y distancias con OSRM Table Service (`buildTravelMatrix`).
-2. Se genera un orden inicial con nearest neighbor (`nearestNeighborRoute`).
-3. Se mejora localmente con 2-opt (`twoOptImprove`).
+2. Se genera y evalua un orden inicial desde multiples puntos de arranque con nearest neighbor.
+3. Se mejora localmente con 2-opt y se selecciona el mejor coste total (`selectBestOpenRoute`).
 4. Se solicita la geometria real a OSRM Route Service (`fetchFullRoute`).
-5. Se calculan los tramos y totales (`computeLegSummaries` + `buildRouteSummary`).
+5. Se calculan los tramos y pasos de navegacion por calle (`computeLegSummaries` + `buildRouteSummary`).
 6. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle manteniendo ese nuevo orden.
 
 La heuristica busca un recorrido practico y rapido de calcular. No garantiza el TSP matematicamente optimo absoluto.
