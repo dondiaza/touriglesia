@@ -12,6 +12,7 @@ import SearchBox from "@/components/SearchBox";
 import SuggestionsPanel from "@/components/SuggestionsPanel";
 import { clearAuthCookie } from "@/lib/auth";
 import { MAX_POINTS } from "@/lib/constants";
+import { normalizeUserError } from "@/lib/errors";
 import {
   buildMapPointDraftFromReverse,
   fetchNearbyInterest,
@@ -278,10 +279,11 @@ export default function TourPlanner() {
       const outcome = addPoint(draft);
 
       if (!outcome.ok) {
-        const message =
-          mapError instanceof Error
-            ? mapError.message
-            : "No se pudo anadir el punto desde el mapa.";
+        const message = normalizeUserError(
+          mapError,
+          "No se pudo anadir el punto desde el mapa.",
+          "No se pudo conectar al geocodificador, y tampoco fue posible anadir el punto."
+        );
 
         setError(message);
       } else {
@@ -336,10 +338,11 @@ export default function TourPlanner() {
         setManualPointOrder(null);
       }
     } catch (routeError) {
-      const message =
-        routeError instanceof Error
-          ? routeError.message
-          : "No se pudo generar el recorrido.";
+      const message = normalizeUserError(
+        routeError,
+        "No se pudo generar el recorrido.",
+        "No se pudo conectar con el servicio de rutas. Intentalo de nuevo."
+      );
 
       setError(message);
     } finally {
@@ -400,9 +403,11 @@ export default function TourPlanner() {
       setNotice("Llegada registrada. Tienes nuevas sugerencias cercanas.");
     } catch (nearbyError) {
       setError(
-        nearbyError instanceof Error
-          ? nearbyError.message
-          : "No se pudieron cargar sugerencias cercanas."
+        normalizeUserError(
+          nearbyError,
+          "No se pudieron cargar sugerencias cercanas.",
+          "No se pudo conectar para cargar sugerencias cercanas."
+        )
       );
     } finally {
       setIsLoadingNearbyInterests(false);
