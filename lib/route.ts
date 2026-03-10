@@ -1,5 +1,13 @@
-import { OSRM_BASE_URL, OSRM_ROUTE_CHUNK_SIZE } from "./constants";
-import type { LatLngTuple, MapPoint, MatrixResult, RouteLeg, RouteSummary } from "./types";
+import { DEFAULT_TRAVEL_MODE, OSRM_BASE_URL, OSRM_ROUTE_CHUNK_SIZE } from "./constants";
+import type {
+  LatLngTuple,
+  MapPoint,
+  MatrixResult,
+  OrderedStop,
+  RouteLeg,
+  RouteSummary,
+  TravelMode
+} from "./types";
 import { haversineMeters } from "./utils";
 
 type OsrmTableResponse = {
@@ -37,7 +45,10 @@ type RouteFetchResult = {
   totalDurationSeconds: number;
 };
 
-export async function buildWalkingMatrix(points: MapPoint[]): Promise<MatrixResult> {
+export async function buildTravelMatrix(
+  points: MapPoint[],
+  travelMode: TravelMode = DEFAULT_TRAVEL_MODE
+): Promise<MatrixResult> {
   if (points.length === 0) {
     return {
       durations: [],
@@ -53,25 +64,24 @@ export async function buildWalkingMatrix(points: MapPoint[]): Promise<MatrixResu
   }
 
   const coordinateString = buildCoordinateString(points);
-  const primaryUrl = `${OSRM_BASE_URL}/table/v1/foot/${coordinateString}?annotations=duration,distance`;
-  const primaryResponse = await fetch(primaryUrl, {
+  const profile = getOsrmProfile(travelMode);
+  const url = `${OSRM_BASE_URL}/table/v1/${profile}/${coordinateString}?annotations=duration,distance`;
+  const response = await fetch(url, {
     cache: "no-store"
   });
 
-  if (!primaryResponse.ok) {
-    throw new Error("No se pudo obtener la matriz de tiempos andando desde OSRM.");
+  if (!response.ok) {
+    throw new Error(`No se pudo obtener la matriz de tiempos en modo ${travelMode}.`);
   }
 
-  const primaryData = (await primaryResponse.json()) as OsrmTableResponse;
+  const data = (await response.json()) as OsrmTableResponse;
 
-  if (primaryData.code !== "Ok" || !primaryData.durations) {
-    throw new Error(primaryData.message || "OSRM no pudo construir la matriz de recorrido.");
+  if (data.code !== "Ok" || !data.durations) {
+    throw new Error(data.message || "OSRM no pudo construir la matriz del recorrido.");
   }
 
-  const durations = sanitizeMatrix(primaryData.durations, 0);
-  let distances = primaryData.distances
-    ? sanitizeMatrix(primaryData.distances, 0)
-    : [];
+  const durations = sanitizeMatrix(data.durations, 0);
+  let distances = data.distances ? sanitizeMatrix(data.distances, 0) : [];
 
   if (distances.length === 0) {
     distances = points.map((fromPoint) =>
@@ -85,7 +95,14 @@ export async function buildWalkingMatrix(points: MapPoint[]): Promise<MatrixResu
   };
 }
 
-export async function fetchFullWalkingRoute(orderedPoints: MapPoint[]): Promise<RouteFetchResult> {
+export async function buildWalkingMatrix(points: MapPoint[]) {
+  return buildTravelMatrix(points, "walking");
+}
+
+export async function fetchFullRoute(
+  orderedPoints: MapPoint[],
+  travelMode: TravelMode = DEFAULT_TRAVEL_MODE
+): Promise<RouteFetchResult> {
   if (orderedPoints.length < 2) {
     return {
       geometry: orderedPoints.map((point) => [point.lat, point.lon]),
@@ -102,7 +119,7 @@ export async function fetchFullWalkingRoute(orderedPoints: MapPoint[]): Promise<
   let totalDurationSeconds = 0;
 
   for (let index = 0; index < chunks.length; index += 1) {
-    const chunkResult = await fetchRouteChunk(chunks[index]);
+    const chunkResult = await fetchRouteChunk(chunks[index], travelMode);
 
     geometry =
       index === 0
@@ -120,6 +137,10 @@ export async function fetchFullWalkingRoute(orderedPoints: MapPoint[]): Promise<
     totalDistanceMeters,
     totalDurationSeconds
   };
+}
+
+export async function fetchFullWalkingRoute(orderedPoints: MapPoint[]) {
+  return fetchFullRoute(orderedPoints, "walking");
 }
 
 export function computeLegSummaries(
@@ -165,10 +186,33 @@ export function computeLegSummaries(
   });
 }
 
+export function buildOrderedStopsFromLegs(orderedPoints: MapPoint[], legs: RouteLeg[]): OrderedStop[] {
+  return orderedPoints.map((point, index) => {
+    if (index === 0) {
+      return {
+        pointId: point.id,
+        routeIndex: 0,
+        distanceFromPrevious: 0,
+        durationFromPrevious: 0
+      };
+    }
+
+    const leg = legs[index - 1];
+
+    return {
+      pointId: point.id,
+      routeIndex: index,
+      distanceFromPrevious: leg?.distanceMeters ?? 0,
+      durationFromPrevious: leg?.durationSeconds ?? 0
+    };
+  });
+}
+
 export function buildRouteSummary(
   orderedPoints: MapPoint[],
   geometry: LatLngTuple[],
-  legs: RouteLeg[]
+  legs: RouteLeg[],
+  travelMode: TravelMode = DEFAULT_TRAVEL_MODE
 ): RouteSummary {
   const totals = legs.reduce(
     (accumulator, leg) => {
@@ -188,13 +232,18 @@ export function buildRouteSummary(
     totalDurationSeconds: totals.duration,
     legs,
     geometry,
-    generatedAt: new Date().toISOString()
+    generatedAt: new Date().toISOString(),
+    travelMode
   };
 }
 
-async function fetchRouteChunk(points: MapPoint[]): Promise<RouteFetchResult> {
+async function fetchRouteChunk(
+  points: MapPoint[],
+  travelMode: TravelMode
+): Promise<RouteFetchResult> {
   const coordinateString = buildCoordinateString(points);
-  const url = `${OSRM_BASE_URL}/route/v1/foot/${coordinateString}?overview=full&geometries=geojson&steps=false`;
+  const profile = getOsrmProfile(travelMode);
+  const url = `${OSRM_BASE_URL}/route/v1/${profile}/${coordinateString}?overview=full&geometries=geojson&steps=false`;
   const response = await fetch(url, {
     cache: "no-store"
   });
@@ -263,4 +312,8 @@ function createRouteChunks(points: MapPoint[], chunkSize: number) {
   }
 
   return chunks;
+}
+
+function getOsrmProfile(travelMode: TravelMode) {
+  return travelMode === "driving" ? "driving" : "foot";
 }
