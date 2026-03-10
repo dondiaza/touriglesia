@@ -15,7 +15,8 @@ const display = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: "TourIglesia",
-  description: "Planificador web minimo para recorridos andando entre iglesias y otros puntos."
+  description:
+    "Planificador web para rutas cofrades y eclesiasticas con mapa, busqueda priorizada, historial y sugerencias diarias."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
