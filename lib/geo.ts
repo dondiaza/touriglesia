@@ -1,4 +1,5 @@
 import { NOMINATIM_BASE_URL, SACRED_SEARCH_PRESETS } from "./constants";
+import { normalizeUserError } from "./errors";
 import type { PointDraft, SearchBias, SearchResult } from "./types";
 import { clampPointName, createStableId } from "./utils";
 
@@ -42,11 +43,26 @@ export async function searchLocations(
   }
 
   const queries = buildSearchVariants(normalized);
-  const responses = await Promise.all(
+  const settledResponses = await Promise.allSettled(
     queries.map((searchQuery, index) =>
       fetchSearchVariant(searchQuery, limit, index, options?.bias || null)
     )
   );
+  const responses = settledResponses
+    .filter((response): response is PromiseFulfilledResult<{ rank: number; items: NominatimResult[] }> => response.status === "fulfilled")
+    .map((response) => response.value);
+
+  if (responses.length === 0) {
+    const firstError = settledResponses.find((response) => response.status === "rejected");
+
+    throw new Error(
+      normalizeUserError(
+        firstError?.status === "rejected" ? firstError.reason : null,
+        "No se pudo buscar la ubicacion.",
+        "No se pudo conectar con el buscador de ubicaciones. Revisa la conexion e intentalo de nuevo."
+      )
+    );
+  }
 
   const rankedResults = responses
     .flatMap((response) =>
@@ -94,7 +110,7 @@ export async function fetchNearbyInterest(
     "cerveceria"
   ];
 
-  const responses = await Promise.all(
+  const settledResponses = await Promise.allSettled(
     queries.map((query, index) =>
       fetchSearchVariant(
         query,
@@ -109,6 +125,13 @@ export async function fetchNearbyInterest(
       )
     )
   );
+  const responses = settledResponses
+    .filter((response): response is PromiseFulfilledResult<{ rank: number; items: NominatimResult[] }> => response.status === "fulfilled")
+    .map((response) => response.value);
+
+  if (responses.length === 0) {
+    return [];
+  }
 
   const flattened = responses
     .flatMap((response) =>
@@ -293,22 +316,36 @@ async function fetchSearchVariant(
     applyBiasParams(params, bias);
   }
 
-  const response = await fetch(`${NOMINATIM_BASE_URL}/search?${params.toString()}`, {
-    cache: "no-store",
-    headers: {
-      "Accept-Language": "es"
+  try {
+    const response = await fetch(`${NOMINATIM_BASE_URL}/search?${params.toString()}`, {
+      cache: "no-store",
+      headers: {
+        "Accept-Language": "es"
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        throw new Error("Nominatim esta limitando solicitudes temporalmente. Intenta en unos segundos.");
+      }
+
+      throw new Error("No se pudo consultar Nominatim. Intentalo de nuevo en unos segundos.");
     }
-  });
 
-  if (!response.ok) {
-    throw new Error("No se pudo consultar Nominatim. Intentalo de nuevo en unos segundos.");
+    const items = (await response.json()) as NominatimResult[];
+    return {
+      rank,
+      items
+    };
+  } catch (error) {
+    throw new Error(
+      normalizeUserError(
+        error,
+        "No se pudo consultar Nominatim. Intentalo de nuevo en unos segundos.",
+        "No se pudo conectar con Nominatim. Revisa la conexion e intentalo de nuevo."
+      )
+    );
   }
-
-  const items = (await response.json()) as NominatimResult[];
-  return {
-    rank,
-    items
-  };
 }
 
 function applyBiasParams(params: URLSearchParams, bias: SearchBias) {
