@@ -142,7 +142,10 @@ function AutoBounds({
 
 function createPointIcon(point: MapPoint) {
   const ordered = typeof point.routeIndex === "number";
-  const label = ordered ? String(point.routeIndex + 1) : "";
+  const label =
+    ordered && typeof point.routeIndex === "number"
+      ? String(point.routeIndex + 1)
+      : "";
 
   return divIcon({
     className: "tour-marker",
