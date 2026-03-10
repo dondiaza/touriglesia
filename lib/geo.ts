@@ -152,21 +152,25 @@ export async function reverseGeocode(lat: number, lon: number): Promise<SearchRe
     zoom: "18"
   });
 
-  const response = await fetch(`${NOMINATIM_BASE_URL}/reverse?${params.toString()}`, {
-    cache: "no-store"
-  });
+  try {
+    const response = await fetch(`${NOMINATIM_BASE_URL}/reverse?${params.toString()}`, {
+      cache: "no-store"
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as NominatimResult & { error?: string };
+
+    if (data.error) {
+      return null;
+    }
+
+    return rankSearchResult(mapNominatimResult(data), data.display_name, 0, 0, null);
+  } catch {
     return null;
   }
-
-  const data = (await response.json()) as NominatimResult & { error?: string };
-
-  if (data.error) {
-    return null;
-  }
-
-  return rankSearchResult(mapNominatimResult(data), data.display_name, 0, 0, null);
 }
 
 export function searchResultToPointDraft(result: SearchResult, source: PointDraft["source"]): PointDraft {
