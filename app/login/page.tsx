@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import LoginForm from "@/components/LoginForm";
-import { AUTH_COOKIE_NAME, AUTH_COOKIE_VALUE, DEMO_PASSWORD, DEMO_USERNAME } from "@/lib/constants";
+import { AUTH_COOKIE_NAME, AUTH_COOKIE_VALUE } from "@/lib/constants";
 
 export default async function LoginPage() {
   const cookieStore = await cookies();
@@ -23,17 +23,8 @@ export default async function LoginPage() {
             Acceso demo
           </h1>
           <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-            Esta autenticacion es solo para demostracion local. Usa las credenciales fijas para
-            entrar en la aplicacion protegida.
-          </p>
-        </div>
-
-        <div className="mb-6 rounded-2xl border border-[var(--panel-border)] bg-slate-50 p-4 text-sm text-slate-700">
-          <p>
-            Usuario: <span className="font-semibold">{DEMO_USERNAME}</span>
-          </p>
-          <p>
-            Clave: <span className="font-semibold">{DEMO_PASSWORD}</span>
+            Esta autenticacion es solo para demostracion local y no es segura para produccion.
+            Introduce tus credenciales para acceder a la aplicacion protegida.
           </p>
         </div>
 
