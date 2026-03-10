@@ -5,7 +5,7 @@ import {
   computeLegSummaries,
   fetchFullRoute
 } from "./route";
-import { buildOrderedStops, nearestNeighborRoute, twoOptImprove } from "./tsp";
+import { buildOrderedStops, selectBestOpenRoute } from "./tsp";
 import type { MapPoint, OrderedStop, RouteHistoryEntry, RouteSummary, TravelMode } from "./types";
 import {
   applyStopsToPoints,
@@ -23,8 +23,7 @@ type PlannerResult = {
 
 export async function generateOptimizedRoute(points: MapPoint[], travelMode: TravelMode): Promise<PlannerResult> {
   const matrix = await buildTravelMatrix(points, travelMode);
-  const initialOrder = nearestNeighborRoute(matrix, 0);
-  const improvedOrder = twoOptImprove(initialOrder, matrix);
+  const improvedOrder = selectBestOpenRoute(matrix);
   const orderedPoints = improvedOrder.map((index) => points[index]);
   const routeResult = await fetchFullRoute(orderedPoints, travelMode);
   const pointIndexLookup = buildPointIndexLookup(points);
