@@ -158,10 +158,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function hasPostgresConfig() {
-  return Boolean(getDatabaseUrl());
-}
-
 function normalizeStateKey(value: string | null | undefined) {
   const trimmed = value?.trim();
 
