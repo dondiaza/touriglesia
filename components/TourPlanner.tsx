@@ -92,6 +92,7 @@ export default function TourPlanner() {
   const router = useRouter();
 
   const points = useTourStore((state) => state.points);
+  const orderedStops = useTourStore((state) => state.orderedStops);
   const routeSummary = useTourStore((state) => state.routeSummary);
   const routeHistory = useTourStore((state) => state.routeHistory);
   const userLocation = useTourStore((state) => state.userLocation);
@@ -327,9 +328,6 @@ export default function TourPlanner() {
         ? await rebuildRouteFromManualOrder(points, effectivePointOrder, "walking")
         : await generateOptimizedRoute(points, "walking");
       applyRoute(result.routeSummary, result.orderedStops, result.pointsSnapshot);
-      saveRouteToHistory(
-        buildRouteHistoryEntry(result.pointsSnapshot, result.orderedStops, result.routeSummary)
-      );
 
       if (shouldRespectManualOrder) {
         setManualPointOrder(result.routeSummary.pointOrder);
@@ -348,6 +346,45 @@ export default function TourPlanner() {
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  function handleSaveCurrentRoute() {
+    if (!routeSummary || orderedStops.length === 0) {
+      setError("Primero genera una ruta para poder guardarla.");
+      return;
+    }
+
+    const routeNameInput = window.prompt("Nombre de la ruta a guardar:");
+
+    if (routeNameInput === null) {
+      return;
+    }
+
+    const routeName = routeNameInput.trim();
+
+    if (!routeName) {
+      setError("El nombre de ruta es obligatorio.");
+      return;
+    }
+
+    const userNameInput = window.prompt("Nombre de usuario:");
+
+    if (userNameInput === null) {
+      return;
+    }
+
+    const userName = userNameInput.trim();
+
+    if (!userName) {
+      setError("El nombre de usuario es obligatorio.");
+      return;
+    }
+
+    const entry = buildRouteHistoryEntry(points, orderedStops, routeSummary, routeName, userName);
+    saveRouteToHistory(entry);
+    setError(null);
+    setNotice(`Ruta guardada: "${routeName}" por ${userName}.`);
+    setActiveTab("history");
   }
 
   function handleReorderPointOrder(nextOrder: string[]) {
@@ -646,7 +683,7 @@ export default function TourPlanner() {
                   onClick={() => setActiveTab("history")}
                   type="button"
                 >
-                  Historico
+                  Rutas guardadas
                 </button>
                 <button
                   className={cn(
@@ -695,6 +732,14 @@ export default function TourPlanner() {
                       type="button"
                     >
                       {isGenerating ? "Generando..." : "Generar recorrido"}
+                    </button>
+                    <button
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={!routeSummary || isBusy}
+                      onClick={handleSaveCurrentRoute}
+                      type="button"
+                    >
+                      Guardar ruta
                     </button>
                     <button
                       className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
