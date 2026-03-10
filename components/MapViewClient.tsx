@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { divIcon } from "leaflet";
 import {
+  CircleMarker,
   MapContainer,
   Marker,
   Polyline,
@@ -12,7 +13,7 @@ import {
 } from "react-leaflet";
 
 import { DEFAULT_MAP_ZOOM, SEVILLE_CENTER } from "@/lib/constants";
-import type { MapFocus, MapPoint, SuggestedPlace } from "@/lib/types";
+import type { MapFocus, MapPoint, SuggestedPlace, UserLocation } from "@/lib/types";
 import {
   formatCoordinates,
   formatDistance,
@@ -26,6 +27,7 @@ type MapViewClientProps = {
   routeGeometry: Array<[number, number]>;
   isResolvingMapPoint?: boolean;
   suggestionPoints?: SuggestedPlace[];
+  userLocation?: UserLocation | null;
   onAddSuggestionToRoute?: (suggestedPlace: SuggestedPlace) => void;
   onRemovePoint?: (pointId: string) => void;
   onMapClick: (lat: number, lon: number) => void;
@@ -42,6 +44,7 @@ export default function MapViewClient({
   routeGeometry,
   isResolvingMapPoint = false,
   suggestionPoints = [],
+  userLocation = null,
   onAddSuggestionToRoute,
   onRemovePoint,
   onMapClick
@@ -170,6 +173,20 @@ export default function MapViewClient({
             position={[suggestion.lat, suggestion.lon]}
           />
         ))}
+
+        {userLocation ? (
+          <CircleMarker
+            center={[userLocation.lat, userLocation.lon]}
+            pathOptions={{
+              color: "#1d4ed8",
+              fillColor: "#3b82f6",
+              fillOpacity: 0.85,
+              opacity: 1,
+              weight: 2
+            }}
+            radius={8}
+          />
+        ) : null}
       </MapContainer>
 
       <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-[500] flex justify-center sm:justify-start">
