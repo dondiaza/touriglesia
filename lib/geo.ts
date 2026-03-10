@@ -110,6 +110,28 @@ export function searchResultToPointDraft(result: SearchResult, source: PointDraf
   };
 }
 
+export function buildMapPointDraftFromReverse(
+  lat: number,
+  lon: number,
+  reverseResult: SearchResult | null
+): PointDraft {
+  if (!reverseResult) {
+    return buildFallbackPointDraft(lat, lon);
+  }
+
+  return {
+    id: createStableId("point"),
+    name: clampPointName(reverseResult.name, "Punto en mapa"),
+    lat,
+    lon,
+    address: reverseResult.address || reverseResult.displayName || "Ubicacion aproximada",
+    displayName: reverseResult.displayName,
+    placeType: reverseResult.placeType,
+    metadata: reverseResult.metadata,
+    source: "map"
+  };
+}
+
 export function buildFallbackPointDraft(lat: number, lon: number): PointDraft {
   return {
     id: createStableId("point"),
