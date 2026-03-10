@@ -24,16 +24,24 @@ type MapViewClientProps = {
   points: MapPoint[];
   mapFocus: MapFocus | null;
   routeGeometry: Array<[number, number]>;
+  isResolvingMapPoint?: boolean;
   onMapClick: (lat: number, lon: number) => void;
+};
+
+type PendingMapPoint = {
+  lat: number;
+  lon: number;
 };
 
 export default function MapViewClient({
   points,
   mapFocus,
   routeGeometry,
+  isResolvingMapPoint = false,
   onMapClick
 }: MapViewClientProps) {
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const [pendingMapPoint, setPendingMapPoint] = useState<PendingMapPoint | null>(null);
 
   const selectedPoint = useMemo(
     () => points.find((point) => point.id === selectedPointId) ?? null,
@@ -46,6 +54,20 @@ export default function MapViewClient({
     }
   }, [points, selectedPointId]);
 
+  function handleMapSelect(lat: number, lon: number) {
+    setSelectedPointId(null);
+    setPendingMapPoint({ lat, lon });
+  }
+
+  function confirmAddPoint() {
+    if (!pendingMapPoint) {
+      return;
+    }
+
+    onMapClick(pendingMapPoint.lat, pendingMapPoint.lon);
+    setPendingMapPoint(null);
+  }
+
   return (
     <div className="relative h-[50vh] min-h-[420px] overflow-hidden rounded-3xl border border-[var(--panel-border)] shadow-[var(--shadow)] lg:h-[calc(100vh-8rem)]">
       <MapContainer center={SEVILLE_CENTER} className="h-full w-full" zoom={DEFAULT_MAP_ZOOM}>
@@ -54,10 +76,7 @@ export default function MapViewClient({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <MapClickHandler
-          onMapClick={onMapClick}
-          onPreviewClear={() => setSelectedPointId(null)}
-        />
+        <MapClickHandler onMapClick={handleMapSelect} />
         <AutoBounds points={points} routeGeometry={routeGeometry} />
         <FocusController mapFocus={mapFocus} />
 
@@ -77,6 +96,7 @@ export default function MapViewClient({
             eventHandlers={{
               click() {
                 setSelectedPointId(point.id);
+                setPendingMapPoint(null);
               }
             }}
             icon={createPointIcon(point)}
@@ -88,10 +108,40 @@ export default function MapViewClient({
 
       <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-[500] flex justify-center sm:justify-start">
         <div className="pointer-events-auto rounded-2xl border border-white/80 bg-white/92 px-4 py-3 text-sm text-slate-700 shadow-lg backdrop-blur">
-          Toca o haz click en el mapa para anadir un punto. Pulsa sobre un marcador para ver una
-          ficha rapida.
+          Toca o haz click en el mapa para seleccionar una ubicacion. Se pedira confirmacion antes
+          de anadir el punto.
         </div>
       </div>
+
+      {pendingMapPoint ? (
+        <div className="pointer-events-none absolute bottom-20 left-4 right-4 z-[520] flex justify-center sm:justify-start">
+          <div className="pointer-events-auto w-full max-w-md rounded-3xl border border-white/80 bg-white/95 p-4 shadow-xl backdrop-blur">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+              Confirmar punto
+            </p>
+            <p className="mt-2 text-sm text-slate-700">
+              Coordenadas seleccionadas: {formatCoordinates(pendingMapPoint.lat, pendingMapPoint.lon)}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                className="rounded-2xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isResolvingMapPoint}
+                onClick={confirmAddPoint}
+                type="button"
+              >
+                {isResolvingMapPoint ? "Anadiendo..." : "Anadir punto"}
+              </button>
+              <button
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                onClick={() => setPendingMapPoint(null)}
+                type="button"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {selectedPoint ? (
         <div className="pointer-events-none absolute left-4 top-4 z-[500] max-w-sm">
@@ -136,16 +186,9 @@ export default function MapViewClient({
   );
 }
 
-function MapClickHandler({
-  onMapClick,
-  onPreviewClear
-}: {
-  onMapClick: (lat: number, lon: number) => void;
-  onPreviewClear: () => void;
-}) {
+function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lon: number) => void }) {
   useMapEvents({
     click(event) {
-      onPreviewClear();
       onMapClick(event.latlng.lat, event.latlng.lng);
     }
   });
