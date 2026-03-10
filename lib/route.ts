@@ -322,7 +322,14 @@ async function fetchRouteChunk(
 ): Promise<RouteFetchResult> {
   const coordinateString = buildCoordinateString(points);
   const profile = getOsrmProfile(travelMode);
-  const url = `${OSRM_BASE_URL}/route/v1/${profile}/${coordinateString}?overview=full&geometries=geojson&steps=true&continue_straight=false`;
+  const params = new URLSearchParams({
+    overview: "full",
+    geometries: "geojson",
+    steps: "true",
+    continue_straight: "false",
+    alternatives: travelMode === "walking" ? "true" : "false"
+  });
+  const url = `${OSRM_BASE_URL}/route/v1/${profile}/${coordinateString}?${params.toString()}`;
   const response = await fetch(url, {
     cache: "no-store"
   });
@@ -332,11 +339,13 @@ async function fetchRouteChunk(
   }
 
   const data = (await response.json()) as OsrmRouteResponse;
-  const route = data.routes?.[0];
+  const routes = data.routes ?? [];
 
-  if (data.code !== "Ok" || !route) {
+  if (data.code !== "Ok" || routes.length === 0) {
     throw new Error(data.message || "OSRM no pudo calcular el recorrido completo.");
   }
+
+  const route = selectBestRoute(routes, travelMode);
 
   return {
     geometry: route.geometry.coordinates.map(([lon, lat]) => [lat, lon]),
@@ -439,6 +448,28 @@ function mapRouteStep(step: OsrmRouteStep): RouteStep {
     maneuverType,
     maneuverModifier
   };
+}
+
+function selectBestRoute(routes: OsrmRoute[], travelMode: TravelMode) {
+  if (routes.length === 1) {
+    return routes[0];
+  }
+
+  return routes.reduce((best, current) => {
+    if (travelMode === "walking") {
+      if (current.distance !== best.distance) {
+        return current.distance < best.distance ? current : best;
+      }
+
+      return current.duration < best.duration ? current : best;
+    }
+
+    if (current.duration !== best.duration) {
+      return current.duration < best.duration ? current : best;
+    }
+
+    return current.distance < best.distance ? current : best;
+  });
 }
 
 function buildInstruction(
