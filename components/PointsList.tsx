@@ -19,14 +19,17 @@ export default function PointsList({
   const sortedPoints = sortPointsForDisplay(points);
 
   return (
-    <section className="rounded-[24px] border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)] backdrop-blur">
+    <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
       <div className="mb-4">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
           Puntos
         </p>
         <h2 className="mt-2 font-display text-xl font-semibold text-slate-900">
-          Lista lateral
+          Paradas
         </h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">
+          Edita nombres, centra ubicaciones y elimina puntos desde esta lista.
+        </p>
       </div>
 
       {sortedPoints.length === 0 ? (
@@ -39,10 +42,7 @@ export default function PointsList({
             const badge = typeof point.routeIndex === "number" ? point.routeIndex + 1 : point.createdOrder;
 
             return (
-              <li
-                className="rounded-2xl border border-slate-200 bg-white/80 p-3"
-                key={point.id}
-              >
+              <li className="rounded-2xl border border-slate-200 bg-slate-50 p-3" key={point.id}>
                 <div className="flex items-start gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] font-semibold text-[var(--accent-strong)]">
                     {badge}
