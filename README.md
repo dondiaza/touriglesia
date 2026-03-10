@@ -91,9 +91,11 @@ store/
 - Limite de 25 puntos
 - Selector de modo de viaje: a pie por defecto o coche
 - Generacion de ruta eficiente con matriz OSRM + nearest neighbor + 2-opt
+- En modo a pie, la optimizacion prioriza distancia total (tramo mas corto posible entre puntos)
 - Reordenacion manual de la ruta generada con recalculo inmediato
 - Historico local de rutas creadas y reajustadas en una pestana dedicada
 - Sugerencias clave sobre el mapa (iglesias, interes cofrade y cervecerias) con seleccion y anadido a ruta
+- Checks por categoria para mostrar en bloque sugerencias cercanas (radio 200 m desde geolocalizacion)
 - Eliminacion de puntos directamente desde la ficha del marcador en el mapa
 - Marcadores renumerados segun el orden final
 - Preview flotante al pulsar un marcador del mapa
@@ -107,13 +109,15 @@ store/
 ## Como funciona el calculo de ruta
 
 1. Se construye una matriz de tiempos y distancias con OSRM Table Service (`buildTravelMatrix`).
-2. Se genera y evalua un orden inicial desde multiples puntos de arranque con nearest neighbor.
-3. Se mejora localmente con 2-opt y se selecciona el mejor coste total (`selectBestOpenRoute`).
-4. Se consulta OSRM Trip Service y se compara contra la heuristica local para elegir el orden mas corto disponible.
-5. Se solicita la geometria real a OSRM Route Service (`fetchFullRoute`).
-6. El trazado por tramo permite volver por la misma calle si compensa (`continue_straight=false`).
-7. Se calculan los tramos y pasos de navegacion por calle (`computeLegSummaries` + `buildRouteSummary`).
-8. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle manteniendo ese nuevo orden.
+2. Se elige la metrica de optimizacion: `distance` para modo a pie y `duration` para coche.
+3. Se genera y evalua un orden inicial desde multiples puntos de arranque con nearest neighbor.
+4. Se mejora localmente con 2-opt y se selecciona el mejor coste total (`selectBestOpenRoute`).
+5. Se consulta OSRM Trip Service y se compara contra la heuristica local para elegir el orden mas corto disponible.
+6. Se solicita la geometria real a OSRM Route Service (`fetchFullRoute`).
+7. En modo a pie, la geometria se calcula tramo a tramo (punto A -> punto B) para forzar el camino mas corto de cada salto.
+8. El trazado por tramo permite volver por la misma calle si compensa (`continue_straight=false`).
+9. Se calculan los tramos y pasos de navegacion por calle (`computeLegSummaries` + `buildRouteSummary`).
+10. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle manteniendo ese nuevo orden.
 
 La heuristica busca un recorrido practico y rapido de calcular. No garantiza el TSP matematicamente optimo absoluto.
 
@@ -138,6 +142,7 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 - La optimizacion combina heuristica local y OSRM Trip, pero sigue siendo aproximada y no garantiza el optimo matematico absoluto.
 - Los sitios compartidos y apoyos son locales al navegador (sin backend multiusuario real en este MVP).
 - La geolocalizacion requiere permiso del navegador; si se deniega, la app usa busqueda general.
+- Las sugerencias por check de categoria en mapa solo muestran puntos dentro de 200 m desde la posicion geolocalizada.
 - La pestaña de sugerencias resume noticias publicas y no sustituye a una agenda oficial de hermandades o cofradias.
 - Si los servicios externos fallan, la aplicacion muestra errores amigables, pero no puede completar la busqueda, la ruta o el resumen del dia.
 
