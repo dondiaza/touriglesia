@@ -12,7 +12,7 @@ type GdeltArticle = {
 
 export async function fetchDailyCofradiaDigest(isoDate: string): Promise<DailyNewsDigest> {
   const compactDate = isoDate.replaceAll("-", "");
-  const query = encodeURIComponent(`${COFRADE_NEWS_QUERY} sourceCountry:ES`);
+  const query = encodeURIComponent(`(${COFRADE_NEWS_QUERY}) sourceCountry:ES`);
   const url = `${GDELT_BASE_URL}?query=${query}&mode=ArtList&format=json&maxrecords=10&sort=datedesc&startdatetime=${compactDate}000000&enddatetime=${compactDate}235959`;
   const response = await fetch(url, {
     cache: "no-store"
@@ -22,7 +22,15 @@ export async function fetchDailyCofradiaDigest(isoDate: string): Promise<DailyNe
     throw new Error("No se pudieron cargar las noticias cofrades del dia seleccionado.");
   }
 
-  const data = (await response.json()) as { articles?: GdeltArticle[] };
+  const rawBody = await response.text();
+  let data: { articles?: GdeltArticle[] };
+
+  try {
+    data = JSON.parse(rawBody) as { articles?: GdeltArticle[] };
+  } catch {
+    throw new Error("El servicio publico de noticias no ha devuelto un JSON valido.");
+  }
+
   const articles = (data.articles ?? []).map((article, index) => mapGdeltArticle(article, isoDate, index));
 
   return {
