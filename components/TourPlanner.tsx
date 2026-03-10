@@ -22,7 +22,7 @@ import type { SearchResult, TravelMode } from "@/lib/types";
 import { cn, formatDistance, formatDuration, formatTravelMode } from "@/lib/utils";
 import { useTourStore } from "@/store/useTourStore";
 
-type SideTab = "planner" | "suggestions";
+type SideTab = "planner" | "history" | "suggestions";
 
 const TRAVEL_MODE_OPTIONS: TravelMode[] = ["walking", "driving"];
 
@@ -216,8 +216,8 @@ export default function TourPlanner() {
                 Rutas cofrades y eclesiasticas
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-                Busca puntos, anadelos tocando el mapa y genera recorridos eficientes a pie o en
-                coche. El lateral prioriza un uso rapido y claro.
+                Busca puntos, anadelos en el mapa con confirmacion y genera recorridos eficientes a
+                pie o en coche con guia por calles.
               </p>
             </div>
 
@@ -250,7 +250,7 @@ export default function TourPlanner() {
         <div className="grid gap-4 lg:grid-cols-[410px_minmax(0,1fr)]">
           <aside className="space-y-4">
             <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-2 shadow-[var(--shadow)]">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   className={cn(
                     "rounded-2xl px-4 py-3 text-sm font-semibold transition",
@@ -262,6 +262,18 @@ export default function TourPlanner() {
                   type="button"
                 >
                   Planificador
+                </button>
+                <button
+                  className={cn(
+                    "rounded-2xl px-4 py-3 text-sm font-semibold transition",
+                    activeTab === "history"
+                      ? "bg-[var(--accent)] text-white"
+                      : "bg-white text-slate-700 hover:text-[var(--accent-strong)]"
+                  )}
+                  onClick={() => setActiveTab("history")}
+                  type="button"
+                >
+                  Historico
                 </button>
                 <button
                   className={cn(
@@ -341,9 +353,12 @@ export default function TourPlanner() {
                   </div>
 
                   <div className="mt-4 space-y-2 text-sm text-[var(--muted)]">
-                    <p>Toca o haz click en el mapa para anadir puntos desde desktop y mobile.</p>
+                    <p>
+                      Al tocar/click en el mapa no se anade al instante: primero pide confirmacion
+                      para evitar misclick.
+                    </p>
                     <p>Al cambiar puntos o modo de viaje, la ruta anterior se invalida.</p>
-                    {isResolvingClick ? <p>Resolviendo ubicacion del punto tocado...</p> : null}
+                    {isResolvingClick ? <p>Resolviendo ubicacion del punto confirmado...</p> : null}
                   </div>
 
                   {notice ? (
@@ -369,36 +384,41 @@ export default function TourPlanner() {
                   orderedPointIds={routeSummary?.pointOrder ?? []}
                   points={points}
                 />
-
-                <RouteSummary points={points} routeSummary={routeSummary} />
-
-                <HistoryPanel
-                  entries={routeHistory}
-                  onRemove={removeHistoryEntry}
-                  onRestore={handleRestoreHistory}
-                />
               </>
-            ) : (
-              <SuggestionsPanel />
-            )}
+            ) : null}
+
+            {activeTab === "history" ? (
+              <HistoryPanel
+                entries={routeHistory}
+                onRemove={removeHistoryEntry}
+                onRestore={handleRestoreHistory}
+              />
+            ) : null}
+
+            {activeTab === "suggestions" ? <SuggestionsPanel /> : null}
           </aside>
 
-          <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-3 shadow-[var(--shadow)]">
-            <div className="mb-3 flex items-center justify-between px-1 pt-1">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
-                  Mapa
-                </p>
-                <h2 className="mt-1 text-lg font-semibold text-slate-900">Vista del recorrido</h2>
+          <section className="space-y-4">
+            <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-3 shadow-[var(--shadow)]">
+              <div className="mb-3 flex items-center justify-between px-1 pt-1">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
+                    Mapa
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-slate-900">Vista del recorrido</h2>
+                </div>
+                <p className="text-sm text-[var(--muted)]">Tocar o click para seleccionar punto</p>
               </div>
-              <p className="text-sm text-[var(--muted)]">Tocar o click para anadir</p>
-            </div>
-            <MapView
-              mapFocus={mapFocus}
-              onMapClick={handleMapClick}
-              points={points}
-              routeGeometry={routeGeometry}
-            />
+              <MapView
+                isResolvingMapPoint={isResolvingClick}
+                mapFocus={mapFocus}
+                onMapClick={handleMapClick}
+                points={points}
+                routeGeometry={routeGeometry}
+              />
+            </section>
+
+            <RouteSummary points={points} routeSummary={routeSummary} />
           </section>
         </div>
       </div>
