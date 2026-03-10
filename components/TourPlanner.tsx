@@ -25,13 +25,12 @@ import {
   moveRouteStop,
   rebuildRouteFromManualOrder
 } from "@/lib/planner";
-import type { SearchBias, SearchResult, SuggestedPlace, TravelMode } from "@/lib/types";
+import type { SearchBias, SearchResult, SuggestedPlace } from "@/lib/types";
 import { cn, formatDistance, formatDuration, formatTravelMode, haversineMeters } from "@/lib/utils";
 import { useTourStore } from "@/store/useTourStore";
 
 type SideTab = "planner" | "history" | "suggestions";
 
-const TRAVEL_MODE_OPTIONS: TravelMode[] = ["walking", "driving"];
 const SUGGESTION_RADIUS_METERS = 200;
 
 export default function TourPlanner() {
@@ -40,7 +39,6 @@ export default function TourPlanner() {
   const points = useTourStore((state) => state.points);
   const routeSummary = useTourStore((state) => state.routeSummary);
   const routeHistory = useTourStore((state) => state.routeHistory);
-  const travelMode = useTourStore((state) => state.travelMode);
   const userLocation = useTourStore((state) => state.userLocation);
   const communityPlaces = useTourStore((state) => state.communityPlaces);
   const activeStopIndex = useTourStore((state) => state.activeStopIndex);
@@ -50,12 +48,10 @@ export default function TourPlanner() {
   const updatePointName = useTourStore((state) => state.updatePointName);
   const removePoint = useTourStore((state) => state.removePoint);
   const clearAll = useTourStore((state) => state.clearAll);
-  const clearRoute = useTourStore((state) => state.clearRoute);
   const focusPoint = useTourStore((state) => state.focusPoint);
   const loadDemoPoints = useTourStore((state) => state.loadDemoPoints);
   const applyRoute = useTourStore((state) => state.applyRoute);
   const setNotice = useTourStore((state) => state.setNotice);
-  const setTravelMode = useTourStore((state) => state.setTravelMode);
   const setUserLocation = useTourStore((state) => state.setUserLocation);
   const setActiveStopIndex = useTourStore((state) => state.setActiveStopIndex);
   const shareCommunityPlace = useTourStore((state) => state.shareCommunityPlace);
@@ -224,7 +220,7 @@ export default function TourPlanner() {
     setNotice(null);
 
     try {
-      const result = await generateOptimizedRoute(points, travelMode);
+      const result = await generateOptimizedRoute(points, "walking");
       applyRoute(result.routeSummary, result.orderedStops, result.pointsSnapshot);
       saveRouteToHistory(
         buildRouteHistoryEntry(result.pointsSnapshot, result.orderedStops, result.routeSummary)
@@ -257,7 +253,7 @@ export default function TourPlanner() {
     setNotice("Recalculando la ruta con el orden manual...");
 
     try {
-      const result = await rebuildRouteFromManualOrder(points, nextOrder, travelMode);
+      const result = await rebuildRouteFromManualOrder(points, nextOrder, "walking");
       applyRoute(result.routeSummary, result.orderedStops, result.pointsSnapshot);
       saveRouteToHistory(
         buildRouteHistoryEntry(result.pointsSnapshot, result.orderedStops, result.routeSummary)
@@ -326,24 +322,6 @@ export default function TourPlanner() {
     }
 
     setNearbyInterests((current) => current.filter((item) => item.id !== result.id));
-  }
-
-  function handleTravelModeChange(nextMode: TravelMode) {
-    if (nextMode === travelMode) {
-      return;
-    }
-
-    setTravelMode(nextMode);
-    setError(null);
-
-    if (routeSummary) {
-      clearRoute(
-        `Modo cambiado a ${formatTravelMode(nextMode)}. Genera de nuevo la ruta para recalcularla.`
-      );
-      return;
-    }
-
-    setNotice(`Modo de ruta seleccionado: ${formatTravelMode(nextMode)}.`);
   }
 
   function handleRestoreHistory(routeId: string) {
@@ -593,22 +571,8 @@ export default function TourPlanner() {
                     </p>
                   </div>
 
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {TRAVEL_MODE_OPTIONS.map((mode) => (
-                      <button
-                        className={cn(
-                          "rounded-2xl border px-4 py-3 text-sm font-semibold transition",
-                          travelMode === mode
-                            ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
-                        )}
-                        key={mode}
-                        onClick={() => handleTravelModeChange(mode)}
-                        type="button"
-                      >
-                        {formatTravelMode(mode)}
-                      </button>
-                    ))}
+                  <div className="rounded-2xl border border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-3 text-sm font-semibold text-[var(--accent-strong)]">
+                    Modo fijo: A pie. El calculo siempre prioriza el camino peatonal mas corto.
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
