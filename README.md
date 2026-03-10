@@ -107,11 +107,13 @@ app/
 - Modo de ruta fijo: andando
 - Generacion de ruta eficiente con matriz OSRM + nearest neighbor + 2-opt
 - En modo a pie, la optimizacion prioriza distancia total (tramo mas corto posible entre puntos)
-- Reordenacion manual de la ruta generada con recalculo inmediato
+- Reordenacion manual por drag and drop (desktop + mobile)
+- Al regenerar tras reordenar manualmente, se respeta exactamente el orden establecido
 - Historico local de rutas creadas y reajustadas en una pestana dedicada
 - Sugerencias clave sobre el mapa (iglesias, interes cofrade y cervecerias) con seleccion y anadido a ruta
 - Checks por categoria para mostrar en bloque sugerencias cercanas (radio 200 m desde geolocalizacion)
 - Eliminacion de puntos directamente desde la ficha del marcador en el mapa
+- Reasignacion de puntos arrastrando marcadores directamente sobre el mapa
 - Marcadores renumerados segun el orden final
 - Preview flotante al pulsar un marcador del mapa
 - Polilinea del recorrido
@@ -133,7 +135,7 @@ app/
 8. En tramos peatonales directos (A -> B) se piden alternativas y se escoge la de menor distancia.
 9. El trazado permite volver por la misma calle si compensa (`continue_straight=false`).
 10. Se calculan tramos y pasos por calle (`computeLegSummaries` + `buildRouteSummary`).
-11. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle con ese nuevo orden.
+11. Si el usuario reordena manualmente por drag and drop, al pulsar "Generar recorrido" se recalcula respetando ese orden.
 
 La heuristica busca un recorrido practico y rapido de calcular. No garantiza el TSP matematicamente optimo absoluto.
 
