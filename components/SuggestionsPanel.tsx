@@ -2,6 +2,7 @@
 
 import { startTransition, useDeferredValue, useEffect, useState } from "react";
 
+import { normalizeUserError } from "@/lib/errors";
 import type { DailyNewsDigest } from "@/lib/types";
 import { formatDateLabel, shiftIsoDate, toIsoDate } from "@/lib/utils";
 
@@ -42,9 +43,11 @@ export default function SuggestionsPanel() {
         if (!ignore) {
           setDigest(null);
           setError(
-            requestError instanceof Error
-              ? requestError.message
-              : "No se pudo cargar el resumen de sugerencias."
+            normalizeUserError(
+              requestError,
+              "No se pudo cargar el resumen de sugerencias.",
+              "No se pudo conectar con el servicio de sugerencias."
+            )
           );
         }
       } finally {
