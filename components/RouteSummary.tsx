@@ -1,7 +1,7 @@
 "use client";
 
 import type { MapPoint, RouteSummary as RouteSummaryType } from "@/lib/types";
-import { formatDistance, formatDuration } from "@/lib/utils";
+import { formatDistance, formatDuration, formatTravelMode } from "@/lib/utils";
 
 type RouteSummaryProps = {
   points: MapPoint[];
@@ -13,26 +13,24 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
 
   return (
     <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
-      <div className="mb-4">
+      <div className="mb-4 space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
           Resumen
         </p>
-        <h2 className="mt-2 font-display text-xl font-semibold text-slate-900">
-          Recorrido generado
-        </h2>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Consulta el orden final de visita, la distancia total y el detalle de cada tramo.
+        <h2 className="text-xl font-semibold text-slate-900">Recorrido generado</h2>
+        <p className="text-sm leading-6 text-[var(--muted)]">
+          Consulta el orden final, el modo de desplazamiento y el detalle de cada tramo.
         </p>
       </div>
 
       {!routeSummary ? (
         <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-5 text-sm leading-6 text-[var(--muted)]">
-          Cuando tengas al menos 2 puntos, pulsa "Generar recorrido" para calcular el orden de
-          visita, los tramos andando y la polilinea final.
+          Cuando tengas al menos 2 puntos, genera una ruta para ver distancias, tiempos y el orden
+          recomendado.
         </p>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
                 Puntos
@@ -43,7 +41,15 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                Distancia total
+                Modo
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">
+                {formatTravelMode(routeSummary.travelMode)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                Distancia
               </p>
               <p className="mt-2 text-2xl font-semibold text-slate-900">
                 {formatDistance(routeSummary.totalDistanceMeters)}
@@ -51,7 +57,7 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                Tiempo total
+                Tiempo
               </p>
               <p className="mt-2 text-2xl font-semibold text-slate-900">
                 {formatDuration(routeSummary.totalDurationSeconds)}
@@ -59,15 +65,25 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
             </div>
           </div>
 
+          <p className="mt-4 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+            Generada el{" "}
+            {new Intl.DateTimeFormat("es-ES", { dateStyle: "short", timeStyle: "short" }).format(
+              new Date(routeSummary.generatedAt)
+            )}
+          </p>
+
           <div className="mt-5">
-            <h3 className="font-display text-lg font-semibold text-slate-900">Tramos</h3>
+            <h3 className="text-lg font-semibold text-slate-900">Tramos</h3>
             <ul className="tour-scrollbar mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
               {routeSummary.legs.map((leg) => {
                 const fromPoint = pointLookup.get(leg.fromPointId);
                 const toPoint = pointLookup.get(leg.toPointId);
 
                 return (
-                  <li className="rounded-2xl border border-slate-200 bg-slate-50 p-3" key={`${leg.fromPointId}-${leg.toPointId}-${leg.fromIndex}`}>
+                  <li
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                    key={`${leg.fromPointId}-${leg.toPointId}-${leg.fromIndex}`}
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-semibold text-slate-900">
