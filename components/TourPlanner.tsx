@@ -22,16 +22,70 @@ import { KEY_SITE_SUGGESTIONS, SUGGESTED_CATEGORY_LABELS } from "@/lib/keySites"
 import {
   buildRouteHistoryEntry,
   generateOptimizedRoute,
-  moveRouteStop,
   rebuildRouteFromManualOrder
 } from "@/lib/planner";
-import type { SearchBias, SearchResult, SuggestedPlace } from "@/lib/types";
+import type { MapPoint, SearchBias, SearchResult, SuggestedPlace } from "@/lib/types";
 import { cn, formatDistance, formatDuration, formatTravelMode, haversineMeters } from "@/lib/utils";
 import { useTourStore } from "@/store/useTourStore";
 
 type SideTab = "planner" | "history" | "suggestions";
 
 const SUGGESTION_RADIUS_METERS = 200;
+
+function buildCreatedPointOrder(points: MapPoint[]) {
+  return [...points]
+    .sort((left, right) => left.createdOrder - right.createdOrder)
+    .map((point) => point.id);
+}
+
+function normalizePointOrder(candidateOrder: string[], fallbackOrder: string[], points: MapPoint[]) {
+  const pointIds = new Set(points.map((point) => point.id));
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const pointId of candidateOrder) {
+    if (!pointIds.has(pointId) || seen.has(pointId)) {
+      continue;
+    }
+
+    seen.add(pointId);
+    normalized.push(pointId);
+  }
+
+  for (const pointId of fallbackOrder) {
+    if (!pointIds.has(pointId) || seen.has(pointId)) {
+      continue;
+    }
+
+    seen.add(pointId);
+    normalized.push(pointId);
+  }
+
+  for (const point of points) {
+    if (seen.has(point.id)) {
+      continue;
+    }
+
+    seen.add(point.id);
+    normalized.push(point.id);
+  }
+
+  return normalized;
+}
+
+function isSameOrder(left: string[] | null, right: string[]) {
+  if (!left || left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 export default function TourPlanner() {
   const router = useRouter();
@@ -46,8 +100,10 @@ export default function TourPlanner() {
   const notice = useTourStore((state) => state.notice);
   const addPoint = useTourStore((state) => state.addPoint);
   const updatePointName = useTourStore((state) => state.updatePointName);
+  const movePoint = useTourStore((state) => state.movePoint);
   const removePoint = useTourStore((state) => state.removePoint);
   const clearAll = useTourStore((state) => state.clearAll);
+  const clearRoute = useTourStore((state) => state.clearRoute);
   const focusPoint = useTourStore((state) => state.focusPoint);
   const loadDemoPoints = useTourStore((state) => state.loadDemoPoints);
   const applyRoute = useTourStore((state) => state.applyRoute);
@@ -72,6 +128,7 @@ export default function TourPlanner() {
   const [isLoadingNearbyInterests, setIsLoadingNearbyInterests] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isResolvingClick, setIsResolvingClick] = useState(false);
+  const [manualPointOrder, setManualPointOrder] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const reverseLookupRef = useRef<{
     lat: number;
@@ -172,6 +229,22 @@ export default function TourPlanner() {
     }
   }, [routeSummary]);
 
+  useEffect(() => {
+    setManualPointOrder((currentOrder) => {
+      if (!currentOrder) {
+        return currentOrder;
+      }
+
+      const normalizedOrder = normalizePointOrder(
+        currentOrder,
+        buildCreatedPointOrder(points),
+        points
+      );
+
+      return isSameOrder(currentOrder, normalizedOrder) ? currentOrder : normalizedOrder;
+    });
+  }, [points]);
+
   async function handleAddSearchResult(result: SearchResult) {
     setError(null);
     const outcome = addPoint(searchResultToPointDraft(result, "search"));
@@ -210,6 +283,23 @@ export default function TourPlanner() {
     }
   }
 
+  async function handleMovePointOnMap(pointId: string, lat: number, lon: number) {
+    setError(null);
+    movePoint(pointId, lat, lon);
+
+    try {
+      const reverseResult = await reverseGeocode(lat, lon);
+
+      if (!reverseResult) {
+        return;
+      }
+
+      updatePointName(pointId, reverseResult.name);
+    } catch {
+      // Keep coordinates updated even if reverse geocode fails.
+    }
+  }
+
   async function handleGenerateRoute() {
     if (points.length < 2) {
       return;
@@ -220,11 +310,22 @@ export default function TourPlanner() {
     setNotice(null);
 
     try {
-      const result = await generateOptimizedRoute(points, "walking");
+      const shouldRespectManualOrder =
+        manualPointOrder !== null && effectivePointOrder.length === points.length;
+      const result = shouldRespectManualOrder
+        ? await rebuildRouteFromManualOrder(points, effectivePointOrder, "walking")
+        : await generateOptimizedRoute(points, "walking");
       applyRoute(result.routeSummary, result.orderedStops, result.pointsSnapshot);
       saveRouteToHistory(
         buildRouteHistoryEntry(result.pointsSnapshot, result.orderedStops, result.routeSummary)
       );
+
+      if (shouldRespectManualOrder) {
+        setManualPointOrder(result.routeSummary.pointOrder);
+        setNotice("Ruta generada respetando tu orden manual.");
+      } else {
+        setManualPointOrder(null);
+      }
     } catch (routeError) {
       const message =
         routeError instanceof Error
@@ -237,36 +338,22 @@ export default function TourPlanner() {
     }
   }
 
-  async function handleMovePoint(pointId: string, direction: "up" | "down") {
-    if (!routeSummary) {
+  function handleReorderPointOrder(nextOrder: string[]) {
+    const normalizedOrder = normalizePointOrder(nextOrder, effectivePointOrder, points);
+
+    if (isSameOrder(manualPointOrder, normalizedOrder)) {
       return;
     }
 
-    const nextOrder = moveRouteStop(routeSummary.pointOrder, pointId, direction);
-
-    if (nextOrder.join("|") === routeSummary.pointOrder.join("|")) {
-      return;
-    }
-
-    setIsGenerating(true);
+    setManualPointOrder(normalizedOrder);
     setError(null);
-    setNotice("Recalculando la ruta con el orden manual...");
 
-    try {
-      const result = await rebuildRouteFromManualOrder(points, nextOrder, "walking");
-      applyRoute(result.routeSummary, result.orderedStops, result.pointsSnapshot);
-      saveRouteToHistory(
-        buildRouteHistoryEntry(result.pointsSnapshot, result.orderedStops, result.routeSummary)
-      );
-    } catch (routeError) {
-      setError(
-        routeError instanceof Error
-          ? routeError.message
-          : "No se pudo aplicar el nuevo orden manual."
-      );
-    } finally {
-      setIsGenerating(false);
+    if (routeSummary) {
+      clearRoute("Orden manual actualizado. Pulsa Generar recorrido para recalcular.");
+      return;
     }
+
+    setNotice("Orden manual actualizado.");
   }
 
   async function handleMarkArrived() {
@@ -327,6 +414,7 @@ export default function TourPlanner() {
   function handleRestoreHistory(routeId: string) {
     setActiveTab("planner");
     setError(null);
+    setManualPointOrder(null);
     restoreRouteFromHistory(routeId);
   }
 
@@ -340,12 +428,14 @@ export default function TourPlanner() {
     setActiveTab("planner");
     setError(null);
     setNotice(null);
+    setManualPointOrder(null);
     loadDemoPoints();
   }
 
   function handleClearAll() {
     setError(null);
     setNotice(null);
+    setManualPointOrder(null);
     clearAll();
   }
 
@@ -444,6 +534,14 @@ export default function TourPlanner() {
       cerveceria: 0
     } as Record<SuggestedPlace["category"], number>
   );
+
+  const createdPointOrder = buildCreatedPointOrder(points);
+  const basePointOrder = routeSummary
+    ? normalizePointOrder(routeSummary.pointOrder, createdPointOrder, points)
+    : createdPointOrder;
+  const effectivePointOrder = manualPointOrder
+    ? normalizePointOrder(manualPointOrder, basePointOrder, points)
+    : basePointOrder;
 
   const isBusy = isGenerating || isResolvingClick;
   const canGenerate = points.length >= 2 && !isBusy;
@@ -621,14 +719,14 @@ export default function TourPlanner() {
                 </section>
 
                 <PointsList
-                  canReorder={Boolean(routeSummary)}
-                  isReordering={isGenerating}
+                  canReorder={points.length > 1}
+                  isReordering={isGenerating || isResolvingClick}
                   onFocusPoint={focusPoint}
-                  onMovePoint={handleMovePoint}
+                  onReorderPointOrder={handleReorderPointOrder}
                   onRemovePoint={removePoint}
                   onRenamePoint={updatePointName}
                   onSharePoint={handleSharePoint}
-                  orderedPointIds={routeSummary?.pointOrder ?? []}
+                  orderedPointIds={effectivePointOrder}
                   points={points}
                 />
               </>
@@ -731,13 +829,14 @@ export default function TourPlanner() {
                   </p>
                   <h2 className="mt-1 text-lg font-semibold text-slate-900">Vista del recorrido</h2>
                 </div>
-                <p className="text-sm text-[var(--muted)]">Tocar o click para seleccionar punto</p>
+                <p className="text-sm text-[var(--muted)]">Click/touch para anadir y arrastrar marcador para mover punto</p>
               </div>
               <MapView
                 isResolvingMapPoint={isResolvingClick}
                 mapFocus={mapFocus}
                 onAddSuggestionToRoute={handleAddSuggestedPlaceToRoute}
                 onMapClick={handleMapClick}
+                onMovePoint={handleMovePointOnMap}
                 onRemovePoint={removePoint}
                 points={points}
                 routeGeometry={routeGeometry}
