@@ -3,14 +3,11 @@ import {
   buildTravelMatrix,
   buildOrderedStopsFromLegs,
   computeLegSummaries,
-  fetchTripOptimizedOrder,
   fetchFullRoute
 } from "./route";
 import {
   buildOrderedStops,
-  getOpenPathCost,
   selectBestOpenRoute,
-  twoOptImprove,
   type OptimizationMetric
 } from "./tsp";
 import type { MapPoint, OrderedStop, RouteHistoryEntry, RouteSummary, TravelMode } from "./types";
@@ -32,28 +29,7 @@ export async function generateOptimizedRoute(points: MapPoint[], _travelMode: Tr
   const effectiveTravelMode: TravelMode = "walking";
   const matrix = await buildTravelMatrix(points, effectiveTravelMode);
   const optimizationMetric: OptimizationMetric = "distance";
-  const candidateOrders: number[][] = [];
-  const heuristicOrder = selectBestOpenRoute(matrix, optimizationMetric);
-  candidateOrders.push(heuristicOrder);
-
-  const tripOrder = await fetchTripOptimizedOrder(points, effectiveTravelMode);
-
-  if (tripOrder && tripOrder.length === points.length) {
-    candidateOrders.push(
-      twoOptImprove(tripOrder, matrix, {
-        keepStart: false,
-        metric: optimizationMetric
-      })
-    );
-  }
-
-  const improvedOrder = candidateOrders.reduce((bestOrder, candidateOrder) => {
-    const bestCost = getOpenPathCost(bestOrder, matrix, optimizationMetric);
-    const candidateCost = getOpenPathCost(candidateOrder, matrix, optimizationMetric);
-    return candidateCost < bestCost
-      ? candidateOrder
-      : bestOrder;
-  }, heuristicOrder);
+  const improvedOrder = selectBestOpenRoute(matrix, optimizationMetric);
   const orderedPoints = improvedOrder.map((index) => points[index]);
   const routeResult = await fetchFullRoute(orderedPoints, effectiveTravelMode);
   const pointIndexLookup = buildPointIndexLookup(points);
