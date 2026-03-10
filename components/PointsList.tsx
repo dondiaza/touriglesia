@@ -1,45 +1,59 @@
 "use client";
 
 import type { MapPoint } from "@/lib/types";
-import { formatCoordinates, formatDistance, formatDuration, sortPointsForDisplay } from "@/lib/utils";
+import {
+  formatCoordinates,
+  formatDistance,
+  formatDuration,
+  sortPointsForDisplay
+} from "@/lib/utils";
 
 type PointsListProps = {
   points: MapPoint[];
+  orderedPointIds: string[];
+  canReorder: boolean;
+  isReordering?: boolean;
   onFocusPoint: (id: string) => void;
   onRemovePoint: (id: string) => void;
   onRenamePoint: (id: string, name: string) => void;
+  onMovePoint: (id: string, direction: "up" | "down") => Promise<void> | void;
 };
 
 export default function PointsList({
   points,
+  orderedPointIds,
+  canReorder,
+  isReordering = false,
   onFocusPoint,
   onRemovePoint,
-  onRenamePoint
+  onRenamePoint,
+  onMovePoint
 }: PointsListProps) {
   const sortedPoints = sortPointsForDisplay(points);
 
   return (
     <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
-      <div className="mb-4">
+      <div className="mb-4 space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
           Puntos
         </p>
-        <h2 className="mt-2 font-display text-xl font-semibold text-slate-900">
-          Paradas
-        </h2>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Edita nombres, centra ubicaciones y elimina puntos desde esta lista.
+        <h2 className="text-xl font-semibold text-slate-900">Paradas cargadas</h2>
+        <p className="text-sm leading-6 text-[var(--muted)]">
+          Edita nombres, centra ubicaciones y, si ya hay una ruta, reajusta el orden manualmente.
         </p>
       </div>
 
       {sortedPoints.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-5 text-sm leading-6 text-[var(--muted)]">
-          Todavia no hay puntos. Busca una ubicacion o haz click en el mapa para anadirla.
+          Todavia no hay puntos. Busca una ubicacion o toca el mapa para anadirla.
         </p>
       ) : (
         <ul className="tour-scrollbar max-h-[34rem] space-y-3 overflow-y-auto pr-1">
           {sortedPoints.map((point) => {
-            const badge = typeof point.routeIndex === "number" ? point.routeIndex + 1 : point.createdOrder;
+            const badge =
+              typeof point.routeIndex === "number" ? point.routeIndex + 1 : point.createdOrder;
+            const routePosition = orderedPointIds.indexOf(point.id);
+            const showReorder = canReorder && routePosition !== -1;
 
             return (
               <li className="rounded-2xl border border-slate-200 bg-slate-50 p-3" key={point.id}>
@@ -60,6 +74,9 @@ export default function PointsList({
                       {point.address ? <p>{point.address}</p> : null}
                       <p>Coords: {formatCoordinates(point.lat, point.lon)}</p>
                       {point.placeType ? <p>Tipo: {point.placeType}</p> : null}
+                      {typeof point.routeIndex === "number" ? (
+                        <p>Orden de visita: {point.routeIndex + 1}</p>
+                      ) : null}
                       {typeof point.routeIndex === "number" && point.routeIndex > 0 ? (
                         <p>
                           Desde el punto anterior: {formatDistance(point.distanceFromPrevious)} ·{" "}
@@ -76,6 +93,26 @@ export default function PointsList({
                       >
                         Centrar
                       </button>
+                      {showReorder ? (
+                        <>
+                          <button
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={isReordering || routePosition === 0}
+                            onClick={() => void onMovePoint(point.id, "up")}
+                            type="button"
+                          >
+                            Subir
+                          </button>
+                          <button
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={isReordering || routePosition === orderedPointIds.length - 1}
+                            onClick={() => void onMovePoint(point.id, "down")}
+                            type="button"
+                          >
+                            Bajar
+                          </button>
+                        </>
+                      ) : null}
                       <button
                         className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100"
                         onClick={() => onRemovePoint(point.id)}
