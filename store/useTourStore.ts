@@ -103,7 +103,11 @@ export const useTourStore = create<TourState>()(
 
       setTravelMode(travelMode) {
         set({
-          travelMode
+          travelMode: "walking",
+          notice:
+            travelMode === "walking"
+              ? null
+              : "El planificador esta configurado en modo fijo a pie."
         });
       },
 
@@ -197,7 +201,7 @@ export const useTourStore = create<TourState>()(
           mapFocus: state.userLocation ? buildFocusTarget(state.userLocation.lat, state.userLocation.lon, 14) : null,
           notice: null,
           nextPointOrder: 1,
-          travelMode: state.travelMode
+          travelMode: "walking"
         }));
       },
 
@@ -280,7 +284,7 @@ export const useTourStore = create<TourState>()(
 
         const orderedPoints = sortPointsForDisplay(entry.pointsSnapshot);
         const firstPoint = orderedPoints[0];
-        const restoredTravelMode = entry.routeSummary.travelMode || entry.travelMode || DEFAULT_TRAVEL_MODE;
+        const restoredTravelMode: TravelMode = "walking";
         const nextPointOrder =
           entry.pointsSnapshot.reduce((highestOrder, point) => Math.max(highestOrder, point.createdOrder), 0) + 1;
 
@@ -364,6 +368,11 @@ export const useTourStore = create<TourState>()(
         travelMode: state.travelMode,
         userLocation: state.userLocation,
         communityPlaces: state.communityPlaces
+      }),
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...(persistedState as Partial<TourState>),
+        travelMode: "walking"
       })
     }
   )
