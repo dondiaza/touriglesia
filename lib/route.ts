@@ -137,6 +137,10 @@ export async function fetchFullRoute(
     };
   }
 
+  if (travelMode === "walking") {
+    return fetchRouteLegByLeg(orderedPoints, travelMode);
+  }
+
   const chunks = createRouteChunks(orderedPoints, OSRM_ROUTE_CHUNK_SIZE);
   let geometry: LatLngTuple[] = [];
   let legs: OsrmRouteLeg[] = [];
@@ -339,6 +343,35 @@ async function fetchRouteChunk(
     legs: route.legs,
     totalDistanceMeters: route.distance,
     totalDurationSeconds: route.duration
+  };
+}
+
+async function fetchRouteLegByLeg(
+  orderedPoints: MapPoint[],
+  travelMode: TravelMode
+): Promise<RouteFetchResult> {
+  let geometry: LatLngTuple[] = [];
+  let legs: OsrmRouteLeg[] = [];
+  let totalDistanceMeters = 0;
+  let totalDurationSeconds = 0;
+
+  for (let index = 1; index < orderedPoints.length; index += 1) {
+    const segment = [orderedPoints[index - 1], orderedPoints[index]];
+    const legRoute = await fetchRouteChunk(segment, travelMode);
+    geometry =
+      geometry.length === 0
+        ? legRoute.geometry
+        : [...geometry, ...legRoute.geometry.slice(1)];
+    legs = [...legs, ...legRoute.legs];
+    totalDistanceMeters += legRoute.totalDistanceMeters;
+    totalDurationSeconds += legRoute.totalDurationSeconds;
+  }
+
+  return {
+    geometry,
+    legs,
+    totalDistanceMeters,
+    totalDurationSeconds
   };
 }
 
