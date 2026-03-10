@@ -3,40 +3,53 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import HistoryPanel from "@/components/HistoryPanel";
 import MapView from "@/components/MapView";
 import PointsList from "@/components/PointsList";
 import RouteSummary from "@/components/RouteSummary";
 import SearchBox from "@/components/SearchBox";
+import SuggestionsPanel from "@/components/SuggestionsPanel";
 import { clearAuthCookie } from "@/lib/auth";
 import { MAX_POINTS } from "@/lib/constants";
 import { buildFallbackPointDraft, reverseGeocode, searchResultToPointDraft } from "@/lib/geo";
 import {
-  buildRouteSummary,
-  buildWalkingMatrix,
-  computeLegSummaries,
-  fetchFullWalkingRoute
-} from "@/lib/route";
-import type { SearchResult } from "@/lib/types";
-import { buildOrderedStops, nearestNeighborRoute, twoOptImprove } from "@/lib/tsp";
-import { buildPointIndexLookup, formatDistance, formatDuration } from "@/lib/utils";
+  buildRouteHistoryEntry,
+  generateOptimizedRoute,
+  moveRouteStop,
+  rebuildRouteFromManualOrder
+} from "@/lib/planner";
+import type { SearchResult, TravelMode } from "@/lib/types";
+import { cn, formatDistance, formatDuration, formatTravelMode } from "@/lib/utils";
 import { useTourStore } from "@/store/useTourStore";
+
+type SideTab = "planner" | "suggestions";
+
+const TRAVEL_MODE_OPTIONS: TravelMode[] = ["walking", "driving"];
 
 export default function TourPlanner() {
   const router = useRouter();
 
   const points = useTourStore((state) => state.points);
   const routeSummary = useTourStore((state) => state.routeSummary);
+  const routeHistory = useTourStore((state) => state.routeHistory);
+  const travelMode = useTourStore((state) => state.travelMode);
   const mapFocus = useTourStore((state) => state.mapFocus);
   const notice = useTourStore((state) => state.notice);
   const addPoint = useTourStore((state) => state.addPoint);
   const updatePointName = useTourStore((state) => state.updatePointName);
   const removePoint = useTourStore((state) => state.removePoint);
   const clearAll = useTourStore((state) => state.clearAll);
+  const clearRoute = useTourStore((state) => state.clearRoute);
   const focusPoint = useTourStore((state) => state.focusPoint);
   const loadDemoPoints = useTourStore((state) => state.loadDemoPoints);
   const applyRoute = useTourStore((state) => state.applyRoute);
   const setNotice = useTourStore((state) => state.setNotice);
+  const setTravelMode = useTourStore((state) => state.setTravelMode);
+  const saveRouteToHistory = useTourStore((state) => state.saveRouteToHistory);
+  const restoreRouteFromHistory = useTourStore((state) => state.restoreRouteFromHistory);
+  const removeHistoryEntry = useTourStore((state) => state.removeHistoryEntry);
 
+  const [activeTab, setActiveTab] = useState<SideTab>("planner");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isResolvingClick, setIsResolvingClick] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,30 +104,11 @@ export default function TourPlanner() {
     setNotice(null);
 
     try {
-      const matrix = await buildWalkingMatrix(points);
-      const initialOrder = nearestNeighborRoute(matrix, 0);
-      const improvedOrder = twoOptImprove(initialOrder, matrix);
-      const orderedPoints = improvedOrder.map((index) => points[index]);
-      const orderedStops = buildOrderedStops(improvedOrder, points, matrix);
-      const routeResult = await fetchFullWalkingRoute(orderedPoints);
-      const pointIndexLookup = buildPointIndexLookup(points);
-      const legs = computeLegSummaries(orderedPoints, routeResult.legs, matrix, pointIndexLookup);
-      const summary = buildRouteSummary(orderedPoints, routeResult.geometry, legs);
-      const preciseStops = orderedStops.map((stop, index) => {
-        if (index === 0) {
-          return stop;
-        }
-
-        const leg = legs[index - 1];
-
-        return {
-          ...stop,
-          distanceFromPrevious: leg.distanceMeters,
-          durationFromPrevious: leg.durationSeconds
-        };
-      });
-
-      applyRoute(summary, preciseStops);
+      const result = await generateOptimizedRoute(points, travelMode);
+      applyRoute(result.routeSummary, result.orderedStops, result.pointsSnapshot);
+      saveRouteToHistory(
+        buildRouteHistoryEntry(result.pointsSnapshot, result.orderedStops, result.routeSummary)
+      );
     } catch (routeError) {
       const message =
         routeError instanceof Error
@@ -127,6 +121,62 @@ export default function TourPlanner() {
     }
   }
 
+  async function handleMovePoint(pointId: string, direction: "up" | "down") {
+    if (!routeSummary) {
+      return;
+    }
+
+    const nextOrder = moveRouteStop(routeSummary.pointOrder, pointId, direction);
+
+    if (nextOrder.join("|") === routeSummary.pointOrder.join("|")) {
+      return;
+    }
+
+    setIsGenerating(true);
+    setError(null);
+    setNotice("Recalculando la ruta con el orden manual...");
+
+    try {
+      const result = await rebuildRouteFromManualOrder(points, nextOrder, travelMode);
+      applyRoute(result.routeSummary, result.orderedStops, result.pointsSnapshot);
+      saveRouteToHistory(
+        buildRouteHistoryEntry(result.pointsSnapshot, result.orderedStops, result.routeSummary)
+      );
+    } catch (routeError) {
+      setError(
+        routeError instanceof Error
+          ? routeError.message
+          : "No se pudo aplicar el nuevo orden manual."
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  function handleTravelModeChange(nextMode: TravelMode) {
+    if (nextMode === travelMode) {
+      return;
+    }
+
+    setTravelMode(nextMode);
+    setError(null);
+
+    if (routeSummary) {
+      clearRoute(
+        `Modo cambiado a ${formatTravelMode(nextMode)}. Genera de nuevo la ruta para recalcularla.`
+      );
+      return;
+    }
+
+    setNotice(`Modo de ruta seleccionado: ${formatTravelMode(nextMode)}.`);
+  }
+
+  function handleRestoreHistory(routeId: string) {
+    setActiveTab("planner");
+    setError(null);
+    restoreRouteFromHistory(routeId);
+  }
+
   function handleLogout() {
     clearAuthCookie();
     router.replace("/login");
@@ -134,6 +184,7 @@ export default function TourPlanner() {
   }
 
   function handleLoadDemo() {
+    setActiveTab("planner");
     setError(null);
     setNotice(null);
     loadDemoPoints();
@@ -145,10 +196,11 @@ export default function TourPlanner() {
     clearAll();
   }
 
-  const canGenerate = points.length >= 2 && !isGenerating;
+  const isBusy = isGenerating || isResolvingClick;
+  const canGenerate = points.length >= 2 && !isBusy;
   const routeGeometry = routeSummary?.geometry ?? [];
   const totals = routeSummary
-    ? `${formatDistance(routeSummary.totalDistanceMeters)} · ${formatDuration(routeSummary.totalDurationSeconds)}`
+    ? `${formatTravelMode(routeSummary.travelMode)} · ${formatDistance(routeSummary.totalDistanceMeters)} · ${formatDuration(routeSummary.totalDurationSeconds)}`
     : "Sin ruta generada";
 
   return (
@@ -160,12 +212,12 @@ export default function TourPlanner() {
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
                 TourIglesia
               </p>
-              <h1 className="mt-2 font-display text-3xl font-semibold text-slate-900">
-                Planificador de recorrido andando
+              <h1 className="mt-2 text-3xl font-semibold text-slate-900">
+                Rutas cofrades y eclesiasticas
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-                Anade hasta 25 puntos, genera un orden eficiente para ir a pie y revisa el mapa
-                junto al detalle completo de cada tramo.
+                Busca puntos, anadelos tocando el mapa y genera recorridos eficientes a pie o en
+                coche. El lateral prioriza un uso rapido y claro.
               </p>
             </div>
 
@@ -195,75 +247,140 @@ export default function TourPlanner() {
           </div>
         </header>
 
-        <div className="grid gap-4 lg:grid-cols-[390px_minmax(0,1fr)]">
+        <div className="grid gap-4 lg:grid-cols-[410px_minmax(0,1fr)]">
           <aside className="space-y-4">
-            <SearchBox disabled={points.length >= MAX_POINTS} onAddResult={handleAddSearchResult} />
-
-            <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
-              <div className="mb-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
-                  Acciones
-                </p>
-                <h2 className="mt-2 font-display text-xl font-semibold text-slate-900">
-                  Acciones rapidas
-                </h2>
-                <p className="mt-2 text-sm text-[var(--muted)]">
-                  Genera la ruta, carga el ejemplo demo o limpia el recorrido actual.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
+            <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-2 shadow-[var(--shadow)]">
+              <div className="grid grid-cols-2 gap-2">
                 <button
-                  className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={!canGenerate}
-                  onClick={() => void handleGenerateRoute()}
+                  className={cn(
+                    "rounded-2xl px-4 py-3 text-sm font-semibold transition",
+                    activeTab === "planner"
+                      ? "bg-[var(--accent)] text-white"
+                      : "bg-white text-slate-700 hover:text-[var(--accent-strong)]"
+                  )}
+                  onClick={() => setActiveTab("planner")}
                   type="button"
                 >
-                  {isGenerating ? "Generando..." : "Generar recorrido"}
+                  Planificador
                 </button>
                 <button
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
-                  onClick={handleLoadDemo}
+                  className={cn(
+                    "rounded-2xl px-4 py-3 text-sm font-semibold transition",
+                    activeTab === "suggestions"
+                      ? "bg-[var(--accent)] text-white"
+                      : "bg-white text-slate-700 hover:text-[var(--accent-strong)]"
+                  )}
+                  onClick={() => setActiveTab("suggestions")}
                   type="button"
                 >
-                  Usar ejemplo demo Sevilla
-                </button>
-                <button
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[var(--warm)] hover:text-[var(--warm)]"
-                  onClick={handleClearAll}
-                  type="button"
-                >
-                  Limpiar
+                  Sugerencias
                 </button>
               </div>
-
-              <div className="mt-4 space-y-2 text-sm text-[var(--muted)]">
-                <p>Haz click en el mapa para anadir un punto manual con reverse geocoding si existe.</p>
-                <p>La ruta se desactiva automaticamente cuando cambian los puntos.</p>
-                {isResolvingClick ? <p>Resolviendo ubicacion del click...</p> : null}
-              </div>
-
-              {notice ? (
-                <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  {notice}
-                </p>
-              ) : null}
-
-              {error ? (
-                <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  {error}
-                </p>
-              ) : null}
             </section>
 
-            <PointsList
-              onFocusPoint={focusPoint}
-              onRemovePoint={removePoint}
-              onRenamePoint={updatePointName}
-              points={points}
-            />
+            {activeTab === "planner" ? (
+              <>
+                <SearchBox
+                  disabled={points.length >= MAX_POINTS || isBusy}
+                  onAddResult={handleAddSearchResult}
+                />
 
-            <RouteSummary points={points} routeSummary={routeSummary} />
+                <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
+                  <div className="mb-4 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
+                      Acciones
+                    </p>
+                    <h2 className="text-xl font-semibold text-slate-900">Modo y controles</h2>
+                    <p className="text-sm leading-6 text-[var(--muted)]">
+                      El modo por defecto es a pie. Si cambias a coche, la siguiente ruta se
+                      recalculara con ese perfil.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {TRAVEL_MODE_OPTIONS.map((mode) => (
+                      <button
+                        className={cn(
+                          "rounded-2xl border px-4 py-3 text-sm font-semibold transition",
+                          travelMode === mode
+                            ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                        )}
+                        key={mode}
+                        onClick={() => handleTravelModeChange(mode)}
+                        type="button"
+                      >
+                        {formatTravelMode(mode)}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={!canGenerate}
+                      onClick={() => void handleGenerateRoute()}
+                      type="button"
+                    >
+                      {isGenerating ? "Generando..." : "Generar recorrido"}
+                    </button>
+                    <button
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                      onClick={handleLoadDemo}
+                      type="button"
+                    >
+                      Usar ejemplo demo Sevilla
+                    </button>
+                    <button
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[var(--warm)] hover:text-[var(--warm)]"
+                      onClick={handleClearAll}
+                      type="button"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-2 text-sm text-[var(--muted)]">
+                    <p>Toca o haz click en el mapa para anadir puntos desde desktop y mobile.</p>
+                    <p>Al cambiar puntos o modo de viaje, la ruta anterior se invalida.</p>
+                    {isResolvingClick ? <p>Resolviendo ubicacion del punto tocado...</p> : null}
+                  </div>
+
+                  {notice ? (
+                    <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      {notice}
+                    </p>
+                  ) : null}
+
+                  {error ? (
+                    <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      {error}
+                    </p>
+                  ) : null}
+                </section>
+
+                <PointsList
+                  canReorder={Boolean(routeSummary)}
+                  isReordering={isGenerating}
+                  onFocusPoint={focusPoint}
+                  onMovePoint={handleMovePoint}
+                  onRemovePoint={removePoint}
+                  onRenamePoint={updatePointName}
+                  orderedPointIds={routeSummary?.pointOrder ?? []}
+                  points={points}
+                />
+
+                <RouteSummary points={points} routeSummary={routeSummary} />
+
+                <HistoryPanel
+                  entries={routeHistory}
+                  onRemove={removeHistoryEntry}
+                  onRestore={handleRestoreHistory}
+                />
+              </>
+            ) : (
+              <SuggestionsPanel />
+            )}
           </aside>
 
           <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-3 shadow-[var(--shadow)]">
@@ -272,11 +389,9 @@ export default function TourPlanner() {
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
                   Mapa
                 </p>
-                <h2 className="mt-1 font-display text-lg font-semibold text-slate-900">
-                  Vista del recorrido
-                </h2>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900">Vista del recorrido</h2>
               </div>
-              <p className="text-sm text-[var(--muted)]">Click para anadir puntos</p>
+              <p className="text-sm text-[var(--muted)]">Tocar o click para anadir</p>
             </div>
             <MapView
               mapFocus={mapFocus}
