@@ -148,8 +148,10 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 
 ## Rutas guardadas y persistencia
 
-- Toda la sesion de trabajo (puntos, orden, resumen de ruta, rutas guardadas, comunidad y ubicacion) se persiste en `localStorage`.
-- Si configuras `POSTGRES_URL` o `DATABASE_URL`, el estado completo tambien se sincroniza en `app/api/state` sobre Vercel Postgres (Neon).
+- Toda la sesion de trabajo (puntos, orden, resumen de ruta, rutas guardadas, comunidad y ubicacion) se guarda en BBDD via `app/api/state` cuando `POSTGRES_URL` o `DATABASE_URL` estan configuradas.
+- El cliente mantiene cache local (`localStorage`) para mejorar UX, pero la fuente de verdad remota es la BBDD.
+- La sincronizacion usa control de revision monotona para evitar que escrituras antiguas sobrescriban datos nuevos por latencia o reintentos.
+- Si la carga inicial de BBDD falla temporalmente, la app no hace sobrescritura remota hasta recuperar conexion (evita borrados accidentales).
 - El guardado de rutas sigue siendo manual: tras generar una ruta, pulsa "Guardar ruta" e indica nombre de ruta y usuario.
 - Si la base de datos no esta configurada o falla, la aplicacion mantiene persistencia local y muestra un aviso amigable.
 
