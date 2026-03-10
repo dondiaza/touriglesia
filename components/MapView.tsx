@@ -13,6 +13,7 @@ type MapViewProps = {
   userLocation?: UserLocation | null;
   onAddSuggestionToRoute?: (suggestedPlace: SuggestedPlace) => void;
   onRemovePoint?: (pointId: string) => void;
+  onMovePoint?: (pointId: string, lat: number, lon: number) => void;
   onMapClick: (lat: number, lon: number) => void;
 };
 
