@@ -8,6 +8,7 @@ type MapViewProps = {
   points: MapPoint[];
   mapFocus: MapFocus | null;
   routeGeometry: Array<[number, number]>;
+  isResolvingMapPoint?: boolean;
   onMapClick: (lat: number, lon: number) => void;
 };
 
