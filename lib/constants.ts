@@ -35,8 +35,9 @@ export const GDELT_BASE_URL = "https://api.gdeltproject.org/api/v2/doc/doc";
 
 export const SACRED_SEARCH_PRESETS = [
   "Iglesia",
-  "Parroquia",
   "Hermandad",
+  "Cofradia",
+  "Parroquia",
   "Capilla",
   "Basilica"
 ] as const;
@@ -49,4 +50,4 @@ export const TRAVEL_MODE_LABELS: Record<TravelMode, string> = {
 };
 
 export const COFRADE_NEWS_QUERY =
-  "\"semana santa\" OR cofradia OR cofradias OR hermandad OR hermandades OR parroquia OR iglesia OR basilica OR procesion";
+  "(sevilla AND (\"semana santa\" OR cofradia OR cofradias OR hermandad OR hermandades OR parroquia OR iglesia OR basilica OR procesion)) OR ((\"semana santa\" OR cofradia OR cofradias OR hermandad OR hermandades OR parroquia OR iglesia OR basilica OR procesion) AND andalucia)";
