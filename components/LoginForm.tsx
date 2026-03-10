@@ -18,7 +18,7 @@ export default function LoginForm() {
     setIsSubmitting(true);
 
     if (!isValidCredentials(username, password)) {
-      setError("Credenciales incorrectas. Usa iglesia / iglesia.");
+      setError("Credenciales incorrectas.");
       setIsSubmitting(false);
       return;
     }
@@ -29,15 +29,14 @@ export default function LoginForm() {
   }
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
+    <form autoComplete="off" className="space-y-4" onSubmit={handleSubmit}>
       <label className="block">
         <span className="mb-2 block text-sm font-medium text-slate-800">Usuario</span>
         <input
-          autoComplete="username"
+          autoComplete="off"
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]"
-          name="username"
+          name="tour_usuario"
           onChange={(event) => setUsername(event.target.value)}
-          placeholder="iglesia"
           required
           value={username}
         />
@@ -46,11 +45,10 @@ export default function LoginForm() {
       <label className="block">
         <span className="mb-2 block text-sm font-medium text-slate-800">Clave</span>
         <input
-          autoComplete="current-password"
+          autoComplete="new-password"
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]"
-          name="password"
+          name="tour_clave"
           onChange={(event) => setPassword(event.target.value)}
-          placeholder="iglesia"
           required
           type="password"
           value={password}
