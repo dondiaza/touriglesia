@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+:root {
+  --page-bg: #f4ecdf;
+  --panel-bg: rgba(255, 251, 246, 0.88);
+  --panel-border: rgba(35, 44, 63, 0.1);
+  --ink: #142132;
+  --muted: #61728a;
+  --accent: #0f766e;
+  --accent-strong: #115e59;
+  --accent-soft: rgba(15, 118, 110, 0.12);
+  --warm: #c96d1f;
+  --warm-soft: rgba(201, 109, 31, 0.12);
+  --danger: #b42318;
+  --shadow: 0 20px 45px rgba(18, 33, 50, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(201, 109, 31, 0.16), transparent 28%),
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.16), transparent 22%),
+    linear-gradient(180deg, #faf4ea 0%, var(--page-bg) 100%);
+  font-family: var(--font-sans), sans-serif;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display), sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: rgba(15, 118, 110, 0.22);
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: #dfece6;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 16px;
+}
+
+.tour-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 118, 110, 0.35) transparent;
+}
+
+.tour-marker {
+  background: transparent;
+  border: 0;
+}
+
+.tour-marker__bubble {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 12px 28px rgba(20, 33, 50, 0.2);
+}
+
+.tour-marker__bubble--ordered {
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  background: linear-gradient(135deg, var(--accent-strong), var(--warm));
+}
+
+.tour-marker__bubble--plain {
+  width: 18px;
+  height: 18px;
+  margin: 10px;
+  background: linear-gradient(135deg, var(--warm), #f59e0b);
+  border: 3px solid white;
+}
