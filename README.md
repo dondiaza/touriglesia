@@ -80,6 +80,7 @@ store/
 - Login demo con una unica pantalla protegida
 - Busqueda con autocompletar simple y prioridad para resultados cofrades y eclesiasticos
 - Sincronizacion inicial con geolocalizacion del navegador para priorizar resultados de la zona actual
+- Geolocalizacion en vivo con actualizacion continua y marcador de posicion sobre el mapa
 - Sesgo local en Nominatim (viewbox + pais + limite de area) para evitar resultados de otros paises cuando no toca
 - Atajos de busqueda rapida: Iglesia, Parroquia, Hermandad, Capilla y Basilica
 - Los atajos de busqueda reemplazan la consulta actual (no acumulan terminos)
@@ -115,9 +116,10 @@ store/
 5. Se consulta OSRM Trip Service y se compara contra la heuristica local para elegir el orden mas corto disponible.
 6. Se solicita la geometria real a OSRM Route Service (`fetchFullRoute`).
 7. En modo a pie, la geometria se calcula tramo a tramo (punto A -> punto B) para forzar el camino mas corto de cada salto.
-8. El trazado por tramo permite volver por la misma calle si compensa (`continue_straight=false`).
-9. Se calculan los tramos y pasos de navegacion por calle (`computeLegSummaries` + `buildRouteSummary`).
-10. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle manteniendo ese nuevo orden.
+8. En cada tramo andando se piden alternativas y se selecciona la de menor distancia total.
+9. El trazado por tramo permite volver por la misma calle si compensa (`continue_straight=false`).
+10. Se calculan los tramos y pasos de navegacion por calle (`computeLegSummaries` + `buildRouteSummary`).
+11. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle manteniendo ese nuevo orden.
 
 La heuristica busca un recorrido practico y rapido de calcular. No garantiza el TSP matematicamente optimo absoluto.
 
