@@ -286,6 +286,7 @@ export default function TourPlanner() {
 
         if (message.toLowerCase().includes("persistencia remota no configurada")) {
           isRemoteSyncDisabledRef.current = true;
+          return;
         }
 
         setNotice(message);
@@ -329,6 +330,7 @@ export default function TourPlanner() {
 
           if (message.toLowerCase().includes("persistencia remota no configurada")) {
             isRemoteSyncDisabledRef.current = true;
+            return;
           }
 
           if (hasSyncErrorNoticeRef.current) {
