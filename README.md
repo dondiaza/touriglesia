@@ -120,3 +120,4 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 - Los endpoints de Nominatim y OSRM estan centralizados en `lib/constants.ts`.
 - La ruta completa se segmenta si el numero de coordenadas crece demasiado para una sola llamada a OSRM.
 - El proyecto esta pensado para ejecutarse con `npm install` y `npm run dev` sin backend adicional.
+- La version desplegada puede quedar enlazada a un dominio personalizado en Vercel sin cambiar el codigo.
