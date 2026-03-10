@@ -1,6 +1,6 @@
 # TourIglesia
 
-Aplicacion web para crear rutas entre iglesias, parroquias, hermandades y otros puntos de interes, visualizarlas en mapa y recalcularlas de forma rapida para ir a pie o en coche.
+Aplicacion web para crear rutas entre iglesias, parroquias, hermandades y otros puntos de interes, visualizarlas en mapa y recalcularlas de forma rapida para ir siempre andando.
 
 ## Stack
 
@@ -8,6 +8,10 @@ Aplicacion web para crear rutas entre iglesias, parroquias, hermandades y otros 
 - TypeScript
 - Tailwind CSS 4
 - Leaflet + React Leaflet
+- Mapbox GL + react-map-gl
+- Google Maps JS API (@vis.gl/react-google-maps)
+- MapLibre GL
+- OpenLayers
 - Zustand con persistencia local
 - OpenStreetMap tiles
 - Nominatim para geocodificacion y busqueda
@@ -73,6 +77,16 @@ lib/
   utils.ts
 store/
   useTourStore.ts
+src/
+  components/maps/
+    MapboxMap.tsx
+    GoogleMapView.tsx
+    MapLibreMap.tsx
+    LeafletMap.tsx
+    OpenLayersMap.tsx
+    MapsShowcase.tsx
+app/
+  maps-demo/page.tsx
 ```
 
 ## Funcionalidades incluidas
@@ -90,7 +104,7 @@ store/
 - Correccion de posicion al anadir por mapa: se conserva exactamente la coordenada tocada
 - Edicion de nombre, centrado y eliminacion de puntos
 - Limite de 25 puntos
-- Selector de modo de viaje: a pie por defecto o coche
+- Modo de ruta fijo: andando
 - Generacion de ruta eficiente con matriz OSRM + nearest neighbor + 2-opt
 - En modo a pie, la optimizacion prioriza distancia total (tramo mas corto posible entre puntos)
 - Reordenacion manual de la ruta generada con recalculo inmediato
@@ -110,7 +124,7 @@ store/
 ## Como funciona el calculo de ruta
 
 1. Se construye una matriz de tiempos y distancias con OSRM Table Service (`buildTravelMatrix`).
-2. Se elige la metrica de optimizacion: `distance` para modo a pie y `duration` para coche.
+2. Se usa metrica de optimizacion por `distance` para priorizar el tramo peatonal mas corto.
 3. Se genera y evalua un orden inicial desde multiples puntos de arranque con nearest neighbor.
 4. Se mejora localmente con 2-opt y se selecciona el mejor coste total (`selectBestOpenRoute`).
 5. Se consulta OSRM Trip Service y se compara contra la heuristica local para elegir el orden mas corto disponible.
@@ -125,7 +139,7 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 
 ## Historico y persistencia
 
-- El historico de rutas y el modo de viaje activo se guardan en `localStorage` usando Zustand persist.
+- El historico de rutas se guarda en `localStorage` usando Zustand persist.
 - Tambien se persisten en local `userLocation` (ultima zona sincronizada) y `communityPlaces`.
 - La ruta actual no se persiste completa como sesion de trabajo; el historico sirve como recuperacion rapida.
 - Cada reordenacion manual genera una nueva entrada en el historico.
@@ -145,6 +159,7 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 - Los sitios compartidos y apoyos son locales al navegador (sin backend multiusuario real en este MVP).
 - La geolocalizacion requiere permiso del navegador; si se deniega, la app usa busqueda general.
 - Las sugerencias por check de categoria en mapa solo muestran puntos dentro de 200 m desde la posicion geolocalizada.
+- Mapbox y Google requieren API keys en variables de entorno para funcionar.
 - La pestaña de sugerencias resume noticias publicas y no sustituye a una agenda oficial de hermandades o cofradias.
 - Si los servicios externos fallan, la aplicacion muestra errores amigables, pero no puede completar la busqueda, la ruta o el resumen del dia.
 
@@ -163,3 +178,4 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 - La ruta completa se segmenta si el numero de coordenadas crece demasiado para una sola llamada a OSRM.
 - La autenticacion es solo para demo y no debe reutilizarse en produccion.
 - El proyecto esta pensado para ejecutarse con `npm install` y `npm run dev` sin backend complejo ni base de datos.
+- Consulta `MAPS_SETUP.md` para comparar motores de mapas y configurar claves.
