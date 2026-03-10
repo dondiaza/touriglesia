@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { normalizeUserError } from "@/lib/errors";
 import { fetchDailyCofradiaDigest } from "@/lib/news";
 import { toIsoDate } from "@/lib/utils";
 
@@ -18,10 +19,11 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       {
-        message:
-          error instanceof Error
-            ? error.message
-            : "No se pudieron cargar las sugerencias para la fecha seleccionada."
+        message: normalizeUserError(
+          error,
+          "No se pudieron cargar las sugerencias para la fecha seleccionada.",
+          "No se pudo conectar con el servicio de sugerencias para esta fecha."
+        )
       },
       {
         status: 500
