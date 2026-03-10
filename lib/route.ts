@@ -115,6 +115,10 @@ export async function buildTravelMatrix(
     `No se pudo obtener la matriz de tiempos en modo ${travelMode}.`
   );
 
+  if (!data.durations) {
+    throw new Error("OSRM no devolvio matriz de duraciones.");
+  }
+
   const durations = sanitizeMatrix(data.durations, 0);
   let distances = data.distances ? sanitizeMatrix(data.distances, 0) : [];
 
