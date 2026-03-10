@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import CommunityPanel from "@/components/CommunityPanel";
@@ -77,40 +77,83 @@ export default function TourPlanner() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isResolvingClick, setIsResolvingClick] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasSyncedLocation, setHasSyncedLocation] = useState(false);
+  const reverseLookupRef = useRef<{
+    lat: number;
+    lon: number;
+    at: number;
+    pending: boolean;
+  } | null>(null);
 
   useEffect(() => {
-    if (hasSyncedLocation || typeof navigator === "undefined" || !navigator.geolocation) {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
       return;
     }
 
-    setHasSyncedLocation(true);
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
-        let areaLabel: string | undefined;
-        let countryCode: string | undefined;
-
-        try {
-          const reverseResult = await reverseGeocode(lat, lon);
-          areaLabel =
-            reverseResult?.metadata?.cityLabel ||
-            reverseResult?.displayName?.split(",")[0];
-          countryCode = reverseResult?.metadata?.countryCode;
-        } catch {
-          areaLabel = undefined;
-          countryCode = undefined;
-        }
+        const currentLocation = useTourStore.getState().userLocation;
+        const now = Date.now();
 
         setUserLocation({
           lat,
           lon,
-          areaLabel,
-          countryCode,
+          areaLabel: currentLocation?.areaLabel,
+          countryCode: currentLocation?.countryCode,
           syncedAt: new Date().toISOString()
         });
+
+        const previousLookup = reverseLookupRef.current;
+        const shouldRefreshArea =
+          !currentLocation?.areaLabel ||
+          !currentLocation?.countryCode ||
+          !previousLookup ||
+          haversineMeters(previousLookup.lat, previousLookup.lon, lat, lon) > 1200 ||
+          now - previousLookup.at > 1000 * 60 * 20;
+
+        if (!shouldRefreshArea || previousLookup?.pending) {
+          return;
+        }
+
+        reverseLookupRef.current = {
+          lat,
+          lon,
+          at: now,
+          pending: true
+        };
+
+        void (async () => {
+          try {
+            const reverseResult = await reverseGeocode(lat, lon);
+            const latestLocation = useTourStore.getState().userLocation;
+            const areaLabel =
+              reverseResult?.metadata?.cityLabel || reverseResult?.displayName?.split(",")[0];
+            const countryCode = reverseResult?.metadata?.countryCode;
+
+            if (!latestLocation) {
+              return;
+            }
+
+            setUserLocation({
+              lat: latestLocation.lat,
+              lon: latestLocation.lon,
+              areaLabel: areaLabel || latestLocation.areaLabel,
+              countryCode: countryCode || latestLocation.countryCode,
+              syncedAt: new Date().toISOString()
+            });
+          } catch {
+            // Keep current location even if reverse geocoding fails.
+          } finally {
+            reverseLookupRef.current = {
+              lat,
+              lon,
+              at: Date.now(),
+              pending: false
+            };
+          }
+        })();
+
       },
       () => {
         setNotice("No se pudo sincronizar la ubicacion. Se usara busqueda general.");
@@ -118,10 +161,14 @@ export default function TourPlanner() {
       {
         enableHighAccuracy: true,
         timeout: 12000,
-        maximumAge: 1000 * 60 * 15
+        maximumAge: 1000 * 20
       }
     );
-  }, [hasSyncedLocation, setNotice, setUserLocation]);
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [setNotice, setUserLocation]);
 
   useEffect(() => {
     if (!routeSummary) {
@@ -731,6 +778,7 @@ export default function TourPlanner() {
                 points={points}
                 routeGeometry={routeGeometry}
                 suggestionPoints={visibleSuggestions}
+                userLocation={userLocation}
               />
             </section>
 
