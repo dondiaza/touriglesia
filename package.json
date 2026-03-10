@@ -1,0 +1,31 @@
+{
+  "name": "touriglesia",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "leaflet": "1.9.4",
+    "next": "16.1.0",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
+    "react-leaflet": "5.0.0",
+    "zustand": "5.0.8"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "3.3.1",
+    "@tailwindcss/postcss": "4.1.13",
+    "@types/node": "24.3.0",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "eslint": "9.35.0",
+    "eslint-config-next": "16.1.0",
+    "postcss": "8.5.6",
+    "tailwindcss": "4.1.13",
+    "typescript": "5.9.2"
+  }
+}
