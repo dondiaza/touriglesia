@@ -152,3 +152,15 @@ export type CommunityPlace = {
   votes: number;
   createdAt: string;
 };
+
+export type PersistedTourState = {
+  points: MapPoint[];
+  orderedStops: OrderedStop[];
+  routeSummary: RouteSummary | null;
+  routeHistory: RouteHistoryEntry[];
+  travelMode: TravelMode;
+  userLocation: UserLocation | null;
+  communityPlaces: CommunityPlace[];
+  activeStopIndex: number;
+  nextPointOrder: number;
+};
