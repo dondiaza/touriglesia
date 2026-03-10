@@ -1,4 +1,15 @@
-import { DEFAULT_TRAVEL_MODE, OSRM_BASE_URL, OSRM_ROUTE_CHUNK_SIZE } from "./constants";
+import {
+  DEFAULT_TRAVEL_MODE,
+  OSRM_DRIVING_BASE_URL,
+  OSRM_DRIVING_PROFILE,
+  OSRM_ROUTE_CHUNK_SIZE,
+  OSRM_WALKING_BASE_URL,
+  OSRM_WALKING_FALLBACK_BASE_URL,
+  OSRM_WALKING_FALLBACK_PROFILE,
+  OSRM_WALKING_LEG_BY_LEG_MAX_POINTS,
+  OSRM_WALKING_PROFILE,
+  OSRM_WALKING_MAX_PARALLEL_SEGMENTS
+} from "./constants";
 import type {
   LatLngTuple,
   MapPoint,
@@ -70,6 +81,12 @@ type RouteFetchResult = {
   totalDurationSeconds: number;
 };
 
+type OsrmCandidate = {
+  baseUrl: string;
+  profile: string;
+  label: string;
+};
+
 export async function buildTravelMatrix(
   points: MapPoint[],
   travelMode: TravelMode = DEFAULT_TRAVEL_MODE
@@ -89,21 +106,14 @@ export async function buildTravelMatrix(
   }
 
   const coordinateString = buildCoordinateString(points);
-  const profile = getOsrmProfile(travelMode);
-  const url = `${OSRM_BASE_URL}/table/v1/${profile}/${coordinateString}?annotations=duration,distance`;
-  const response = await fetch(url, {
-    cache: "no-store"
-  });
-
-  if (!response.ok) {
-    throw new Error(`No se pudo obtener la matriz de tiempos en modo ${travelMode}.`);
-  }
-
-  const data = (await response.json()) as OsrmTableResponse;
-
-  if (data.code !== "Ok" || !data.durations) {
-    throw new Error(data.message || "OSRM no pudo construir la matriz del recorrido.");
-  }
+  const candidates = getOsrmCandidates(travelMode);
+  const data = await fetchOsrmJson<OsrmTableResponse>(
+    candidates,
+    (candidate) =>
+      `${candidate.baseUrl}/table/v1/${candidate.profile}/${coordinateString}?annotations=duration,distance`,
+    (payload) => payload.code === "Ok" && Array.isArray(payload.durations),
+    `No se pudo obtener la matriz de tiempos en modo ${travelMode}.`
+  );
 
   const durations = sanitizeMatrix(data.durations, 0);
   let distances = data.distances ? sanitizeMatrix(data.distances, 0) : [];
@@ -137,7 +147,11 @@ export async function fetchFullRoute(
     };
   }
 
-  if (travelMode === "walking") {
+  const shouldUseLegByLegForWalking =
+    travelMode === "walking" &&
+    orderedPoints.length <= OSRM_WALKING_LEG_BY_LEG_MAX_POINTS;
+
+  if (shouldUseLegByLegForWalking) {
     return fetchRouteLegByLeg(orderedPoints, travelMode);
   }
 
@@ -147,17 +161,25 @@ export async function fetchFullRoute(
   let totalDistanceMeters = 0;
   let totalDurationSeconds = 0;
 
-  for (let index = 0; index < chunks.length; index += 1) {
-    const chunkResult = await fetchRouteChunk(chunks[index], travelMode);
+  try {
+    for (let index = 0; index < chunks.length; index += 1) {
+      const chunkResult = await fetchRouteChunk(chunks[index], travelMode);
 
-    geometry =
-      index === 0
-        ? chunkResult.geometry
-        : [...geometry, ...chunkResult.geometry.slice(1)];
+      geometry =
+        index === 0
+          ? chunkResult.geometry
+          : [...geometry, ...chunkResult.geometry.slice(1)];
 
-    legs = [...legs, ...chunkResult.legs];
-    totalDistanceMeters += chunkResult.totalDistanceMeters;
-    totalDurationSeconds += chunkResult.totalDurationSeconds;
+      legs = [...legs, ...chunkResult.legs];
+      totalDistanceMeters += chunkResult.totalDistanceMeters;
+      totalDurationSeconds += chunkResult.totalDurationSeconds;
+    }
+  } catch (error) {
+    if (travelMode !== "walking") {
+      throw error;
+    }
+
+    return fetchRouteLegByLeg(orderedPoints, travelMode);
   }
 
   return {
@@ -180,20 +202,22 @@ export async function fetchTripOptimizedOrder(
     return null;
   }
 
-  const profile = getOsrmProfile(travelMode);
   const coordinateString = buildCoordinateString(points);
-  const url = `${OSRM_BASE_URL}/trip/v1/${profile}/${coordinateString}?roundtrip=false&source=any&destination=any`;
-  const response = await fetch(url, {
-    cache: "no-store"
-  });
+  let data: OsrmTripResponse;
 
-  if (!response.ok) {
+  try {
+    data = await fetchOsrmJson<OsrmTripResponse>(
+      getOsrmCandidates(travelMode),
+      (candidate) =>
+        `${candidate.baseUrl}/trip/v1/${candidate.profile}/${coordinateString}?roundtrip=false&source=any&destination=any`,
+      (payload) => payload.code === "Ok" && Array.isArray(payload.waypoints),
+      "No se pudo obtener una optimizacion adicional del recorrido."
+    );
+  } catch {
     return null;
   }
 
-  const data = (await response.json()) as OsrmTripResponse;
-
-  if (data.code !== "Ok" || !data.waypoints || data.waypoints.length !== points.length) {
+  if (!data.waypoints || data.waypoints.length !== points.length) {
     return null;
   }
 
@@ -321,29 +345,22 @@ async function fetchRouteChunk(
   travelMode: TravelMode
 ): Promise<RouteFetchResult> {
   const coordinateString = buildCoordinateString(points);
-  const profile = getOsrmProfile(travelMode);
+  const enableAlternatives = travelMode === "walking" && points.length <= 2;
   const params = new URLSearchParams({
     overview: "full",
     geometries: "geojson",
     steps: "true",
     continue_straight: "false",
-    alternatives: travelMode === "walking" ? "true" : "false"
+    alternatives: enableAlternatives ? "true" : "false"
   });
-  const url = `${OSRM_BASE_URL}/route/v1/${profile}/${coordinateString}?${params.toString()}`;
-  const response = await fetch(url, {
-    cache: "no-store"
-  });
-
-  if (!response.ok) {
-    throw new Error("OSRM no pudo devolver la geometria de la ruta.");
-  }
-
-  const data = (await response.json()) as OsrmRouteResponse;
+  const data = await fetchOsrmJson<OsrmRouteResponse>(
+    getOsrmCandidates(travelMode),
+    (candidate) =>
+      `${candidate.baseUrl}/route/v1/${candidate.profile}/${coordinateString}?${params.toString()}`,
+    (payload) => payload.code === "Ok" && Array.isArray(payload.routes) && payload.routes.length > 0,
+    "OSRM no pudo calcular el recorrido completo."
+  );
   const routes = data.routes ?? [];
-
-  if (data.code !== "Ok" || routes.length === 0) {
-    throw new Error(data.message || "OSRM no pudo calcular el recorrido completo.");
-  }
 
   const route = selectBestRoute(routes, travelMode);
 
@@ -359,16 +376,24 @@ async function fetchRouteLegByLeg(
   orderedPoints: MapPoint[],
   travelMode: TravelMode
 ): Promise<RouteFetchResult> {
+  const segments = orderedPoints
+    .slice(1)
+    .map((toPoint, index) => [orderedPoints[index], toPoint]);
+  const segmentRoutes = await mapWithConcurrency(
+    segments,
+    OSRM_WALKING_MAX_PARALLEL_SEGMENTS,
+    (segment) => fetchRouteChunk(segment, travelMode)
+  );
+
   let geometry: LatLngTuple[] = [];
   let legs: OsrmRouteLeg[] = [];
   let totalDistanceMeters = 0;
   let totalDurationSeconds = 0;
 
-  for (let index = 1; index < orderedPoints.length; index += 1) {
-    const segment = [orderedPoints[index - 1], orderedPoints[index]];
-    const legRoute = await fetchRouteChunk(segment, travelMode);
+  for (let index = 0; index < segmentRoutes.length; index += 1) {
+    const legRoute = segmentRoutes[index];
     geometry =
-      geometry.length === 0
+      index === 0
         ? legRoute.geometry
         : [...geometry, ...legRoute.geometry.slice(1)];
     legs = [...legs, ...legRoute.legs];
@@ -431,8 +456,82 @@ function createRouteChunks(points: MapPoint[], chunkSize: number) {
   return chunks;
 }
 
-function getOsrmProfile(travelMode: TravelMode) {
-  return travelMode === "driving" ? "driving" : "foot";
+function getOsrmCandidates(travelMode: TravelMode) {
+  const candidates: OsrmCandidate[] =
+    travelMode === "walking"
+      ? [
+          {
+            baseUrl: OSRM_WALKING_BASE_URL,
+            profile: OSRM_WALKING_PROFILE,
+            label: "OSRM Foot Primary"
+          },
+          {
+            baseUrl: OSRM_WALKING_FALLBACK_BASE_URL,
+            profile: OSRM_WALKING_FALLBACK_PROFILE,
+            label: "OSRM Foot Fallback"
+          }
+        ]
+      : [
+          {
+            baseUrl: OSRM_DRIVING_BASE_URL,
+            profile: OSRM_DRIVING_PROFILE,
+            label: "OSRM Driving"
+          }
+        ];
+
+  const dedupedCandidates: OsrmCandidate[] = [];
+  const seen = new Set<string>();
+
+  for (const candidate of candidates) {
+    const key = `${candidate.baseUrl}|${candidate.profile}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    dedupedCandidates.push(candidate);
+  }
+
+  return dedupedCandidates;
+}
+
+async function fetchOsrmJson<T extends { code?: string; message?: string }>(
+  candidates: OsrmCandidate[],
+  buildUrl: (candidate: OsrmCandidate) => string,
+  validate: (payload: T) => boolean,
+  fallbackErrorMessage: string
+) {
+  let lastError: string | null = null;
+
+  for (const candidate of candidates) {
+    const url = buildUrl(candidate);
+
+    try {
+      const response = await fetch(url, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        lastError = `${candidate.label}: HTTP ${response.status}`;
+        continue;
+      }
+
+      const payload = (await response.json()) as T;
+
+      if (validate(payload)) {
+        return payload;
+      }
+
+      lastError =
+        payload.message ||
+        `${candidate.label}: respuesta invalida del servicio de rutas.`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : `${candidate.label}: error desconocido`;
+    }
+  }
+
+  throw new Error(lastError || fallbackErrorMessage);
 }
 
 function mapRouteStep(step: OsrmRouteStep): RouteStep {
@@ -529,4 +628,34 @@ function translateModifier(modifier?: string) {
     default:
       return "segun la via";
   }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>
+) {
+  if (items.length === 0) {
+    return [] as R[];
+  }
+
+  const results = new Array<R>(items.length);
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+  let cursor = 0;
+
+  async function runWorker() {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+
+      if (index >= items.length) {
+        break;
+      }
+
+      results[index] = await worker(items[index], index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  return results;
 }
