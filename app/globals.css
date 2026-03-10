@@ -1,18 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --page-bg: #f4ecdf;
-  --panel-bg: rgba(255, 251, 246, 0.88);
-  --panel-border: rgba(35, 44, 63, 0.1);
-  --ink: #142132;
-  --muted: #61728a;
+  --page-bg: #eef2f7;
+  --panel-bg: #ffffff;
+  --panel-border: #d7e0ea;
+  --ink: #0f172a;
+  --muted: #5f6b7b;
   --accent: #0f766e;
   --accent-strong: #115e59;
-  --accent-soft: rgba(15, 118, 110, 0.12);
-  --warm: #c96d1f;
-  --warm-soft: rgba(201, 109, 31, 0.12);
+  --accent-soft: rgba(15, 118, 110, 0.1);
+  --warm: #b45309;
+  --warm-soft: rgba(180, 83, 9, 0.12);
   --danger: #b42318;
-  --shadow: 0 20px 45px rgba(18, 33, 50, 0.12);
+  --shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
 }
 
 * {
@@ -27,10 +27,7 @@ body {
 body {
   margin: 0;
   color: var(--ink);
-  background:
-    radial-gradient(circle at top left, rgba(201, 109, 31, 0.16), transparent 28%),
-    radial-gradient(circle at top right, rgba(15, 118, 110, 0.16), transparent 22%),
-    linear-gradient(180deg, #faf4ea 0%, var(--page-bg) 100%);
+  background: linear-gradient(180deg, #f8fafc 0%, var(--page-bg) 100%);
   font-family: var(--font-sans), sans-serif;
 }
 
@@ -62,7 +59,7 @@ a {
 }
 
 .leaflet-popup-content-wrapper {
-  border-radius: 16px;
+  border-radius: 12px;
 }
 
 .tour-scrollbar {
@@ -78,25 +75,25 @@ a {
 .tour-marker__bubble {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
-  box-shadow: 0 12px 28px rgba(20, 33, 50, 0.2);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
 }
 
 .tour-marker__bubble--ordered {
   color: white;
-  border: 2px solid rgba(255, 255, 255, 0.7);
-  background: linear-gradient(135deg, var(--accent-strong), var(--warm));
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: var(--accent);
 }
 
 .tour-marker__bubble--plain {
   width: 18px;
   height: 18px;
   margin: 10px;
-  background: linear-gradient(135deg, var(--warm), #f59e0b);
+  background: var(--warm);
   border: 3px solid white;
 }
