@@ -10,6 +10,7 @@ import {
   OSRM_WALKING_PROFILE,
   OSRM_WALKING_MAX_PARALLEL_SEGMENTS
 } from "./constants";
+import { isLikelyNetworkError } from "./errors";
 import type {
   LatLngTuple,
   MapPoint,
@@ -531,7 +532,11 @@ async function fetchOsrmJson<T extends { code?: string; message?: string }>(
         payload.message ||
         `${candidate.label}: respuesta invalida del servicio de rutas.`;
     } catch (error) {
-      lastError = error instanceof Error ? error.message : `${candidate.label}: error desconocido`;
+      if (isLikelyNetworkError(error)) {
+        lastError = `${candidate.label}: no se pudo conectar con el servicio de rutas.`;
+      } else {
+        lastError = error instanceof Error ? error.message : `${candidate.label}: error desconocido`;
+      }
     }
   }
 
