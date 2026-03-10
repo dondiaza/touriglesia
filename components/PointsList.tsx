@@ -17,6 +17,7 @@ type PointsListProps = {
   onRemovePoint: (id: string) => void;
   onRenamePoint: (id: string, name: string) => void;
   onMovePoint: (id: string, direction: "up" | "down") => Promise<void> | void;
+  onSharePoint: (id: string) => void;
 };
 
 export default function PointsList({
@@ -27,7 +28,8 @@ export default function PointsList({
   onFocusPoint,
   onRemovePoint,
   onRenamePoint,
-  onMovePoint
+  onMovePoint,
+  onSharePoint
 }: PointsListProps) {
   const sortedPoints = sortPointsForDisplay(points);
 
@@ -92,6 +94,13 @@ export default function PointsList({
                         type="button"
                       >
                         Centrar
+                      </button>
+                      <button
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                        onClick={() => onSharePoint(point.id)}
+                        type="button"
+                      >
+                        Compartir
                       </button>
                       {showReorder ? (
                         <>
