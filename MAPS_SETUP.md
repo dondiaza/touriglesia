@@ -34,6 +34,24 @@ Prioridad recomendada:
 
 Recomendacion por defecto:
 - Usar `MapboxMap` como principal por equilibrio entre calidad visual, rendimiento y ecosistema.
+- Para funcionamiento inmediato sin API key, usar `LeafletMap` o `MapLibreMap` (estilo demo libre).
+
+## Routing libre recomendado (sin API key)
+
+- Provider peatonal por defecto del proyecto: `https://routing.openstreetmap.de/routed-foot`
+- Fallback peatonal: `https://router.project-osrm.org` (perfil `foot`)
+- Objetivo de Touriglesia: calcular rutas siempre a pie priorizando distancia corta entre puntos.
+
+Variables opcionales en `.env.local`:
+
+```bash
+NEXT_PUBLIC_OSRM_WALKING_BASE_URL=https://routing.openstreetmap.de/routed-foot
+NEXT_PUBLIC_OSRM_WALKING_PROFILE=driving
+NEXT_PUBLIC_OSRM_WALKING_FALLBACK_BASE_URL=https://router.project-osrm.org
+NEXT_PUBLIC_OSRM_WALKING_FALLBACK_PROFILE=foot
+NEXT_PUBLIC_OSRM_DRIVING_BASE_URL=https://router.project-osrm.org
+NEXT_PUBLIC_OSRM_DRIVING_PROFILE=driving
+```
 
 ## Variables de entorno
 
