@@ -1,4 +1,5 @@
 export type PointSource = "search" | "map" | "demo";
+export type TravelMode = "walking" | "driving";
 
 export type LatLngTuple = [number, number];
 
@@ -30,6 +31,8 @@ export type SearchResult = {
   lon: number;
   placeType?: string;
   metadata?: Record<string, string>;
+  sacredMatch?: boolean;
+  priorityScore?: number;
 };
 
 export type MatrixResult = {
@@ -61,6 +64,17 @@ export type RouteSummary = {
   legs: RouteLeg[];
   geometry: LatLngTuple[];
   generatedAt: string;
+  travelMode: TravelMode;
+};
+
+export type RouteHistoryEntry = {
+  id: string;
+  label: string;
+  createdAt: string;
+  travelMode: TravelMode;
+  orderedStops: OrderedStop[];
+  routeSummary: RouteSummary;
+  pointsSnapshot: MapPoint[];
 };
 
 export type MapFocus = {
@@ -68,4 +82,20 @@ export type MapFocus = {
   lon: number;
   zoom?: number;
   nonce: number;
+};
+
+export type NewsArticle = {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  publishedAt: string;
+  imageUrl?: string;
+};
+
+export type DailyNewsDigest = {
+  date: string;
+  summary: string[];
+  articles: NewsArticle[];
+  sourceLabel: string;
 };
