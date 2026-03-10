@@ -100,7 +100,7 @@ export default function PointsList({
         </p>
         <h2 className="text-xl font-semibold text-slate-900">Paradas cargadas</h2>
         <p className="text-sm leading-6 text-[var(--muted)]">
-          Edita nombres, centra ubicaciones y reordena por drag and drop en desktop y mobile.
+          Edita nombres, centra ubicaciones y reordena por arrastrar y soltar en escritorio y movil.
         </p>
       </div>
 
@@ -213,7 +213,7 @@ function SortablePointRow({
             ) : null}
             {typeof point.routeIndex === "number" && point.routeIndex > 0 ? (
               <p>
-                Desde el punto anterior: {formatDistance(point.distanceFromPrevious)} ·{" "}
+                Desde el punto anterior: {formatDistance(point.distanceFromPrevious)} |{" "}
                 {formatDuration(point.durationFromPrevious)}
               </p>
             ) : null}
