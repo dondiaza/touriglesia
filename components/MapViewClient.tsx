@@ -204,7 +204,7 @@ export default function MapViewClient({
 
       <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-[500] flex justify-center sm:justify-start">
         <div className="pointer-events-auto rounded-2xl border border-white/80 bg-white/92 px-4 py-3 text-sm text-slate-700 shadow-lg backdrop-blur">
-          Toca o haz click en el mapa para seleccionar una ubicacion. Se pedira confirmacion antes
+          Toca o haz clic en el mapa para seleccionar una ubicacion. Se pedira confirmacion antes
           de anadir el punto.
         </div>
       </div>
@@ -262,9 +262,9 @@ export default function MapViewClient({
 
             <div className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
               {selectedPoint.address ? <p>{selectedPoint.address}</p> : null}
-              <p>Coords: {formatCoordinates(selectedPoint.lat, selectedPoint.lon)}</p>
+              <p>Coordenadas: {formatCoordinates(selectedPoint.lat, selectedPoint.lon)}</p>
               {selectedPoint.placeType ? <p>Tipo: {selectedPoint.placeType}</p> : null}
-              <p>Origen: {selectedPoint.source}</p>
+              <p>Origen: {formatPointSourceLabel(selectedPoint.source)}</p>
               {typeof selectedPoint.routeIndex === "number" ? (
                 <p>Orden actual: {selectedPoint.routeIndex + 1}</p>
               ) : null}
@@ -313,7 +313,7 @@ export default function MapViewClient({
             <div className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
               {selectedSuggestion.address ? <p>{selectedSuggestion.address}</p> : null}
               {selectedSuggestion.description ? <p>{selectedSuggestion.description}</p> : null}
-              <p>Coords: {formatCoordinates(selectedSuggestion.lat, selectedSuggestion.lon)}</p>
+              <p>Coordenadas: {formatCoordinates(selectedSuggestion.lat, selectedSuggestion.lon)}</p>
             </div>
 
             {onAddSuggestionToRoute ? (
@@ -474,4 +474,17 @@ function createSuggestionIcon(suggestion: SuggestedPlace) {
     iconAnchor: [18, 18],
     popupAnchor: [0, -14]
   });
+}
+
+function formatPointSourceLabel(source: MapPoint["source"]) {
+  switch (source) {
+    case "search":
+      return "Buscador";
+    case "map":
+      return "Mapa";
+    case "demo":
+      return "Ejemplo";
+    default:
+      return source;
+  }
 }
