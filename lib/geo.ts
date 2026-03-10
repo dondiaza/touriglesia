@@ -1,6 +1,6 @@
-import { NOMINATIM_BASE_URL } from "./constants";
+import { NOMINATIM_BASE_URL, SACRED_SEARCH_PRESETS } from "./constants";
 import type { PointDraft, SearchResult } from "./types";
-import { clampPointName } from "./utils";
+import { clampPointName, createStableId } from "./utils";
 
 type NominatimResult = {
   place_id: number;
@@ -15,32 +15,58 @@ type NominatimResult = {
   extratags?: Record<string, string>;
 };
 
-export async function searchLocations(query: string, limit = 5): Promise<SearchResult[]> {
+const SACRED_KEYWORDS = /(iglesia|parroquia|hermandad|cofradia|capilla|basilica|ermita|santuario|convento|templo|colegiata|catedral|church|chapel|cathedral|parish)/i;
+const SACRED_TYPES = new Set([
+  "church",
+  "chapel",
+  "cathedral",
+  "place_of_worship",
+  "religious",
+  "monastery",
+  "shrine"
+]);
+
+export async function searchLocations(query: string, limit = 6): Promise<SearchResult[]> {
   const normalized = query.trim();
 
   if (normalized.length < 3) {
     return [];
   }
 
-  const params = new URLSearchParams({
-    q: normalized,
-    format: "jsonv2",
-    addressdetails: "1",
-    extratags: "1",
-    namedetails: "1",
-    limit: String(limit)
-  });
+  const queries = buildSearchVariants(normalized);
+  const responses = await Promise.all(
+    queries.map((searchQuery, index) => fetchSearchVariant(searchQuery, limit, index))
+  );
 
-  const response = await fetch(`${NOMINATIM_BASE_URL}/search?${params.toString()}`, {
-    cache: "no-store"
-  });
+  const rankedResults = responses
+    .flatMap((response) =>
+      response.items.map((item, itemIndex) => rankSearchResult(mapNominatimResult(item), normalized, response.rank, itemIndex))
+    )
+    .sort((left, right) => {
+      if ((right.priorityScore ?? 0) !== (left.priorityScore ?? 0)) {
+        return (right.priorityScore ?? 0) - (left.priorityScore ?? 0);
+      }
 
-  if (!response.ok) {
-    throw new Error("No se pudo consultar Nominatim. Intentalo de nuevo en unos segundos.");
+      return left.name.localeCompare(right.name, "es");
+    });
+
+  const dedupedResults: SearchResult[] = [];
+  const seenIds = new Set<string>();
+
+  for (const result of rankedResults) {
+    if (seenIds.has(result.id)) {
+      continue;
+    }
+
+    seenIds.add(result.id);
+    dedupedResults.push(result);
+
+    if (dedupedResults.length >= limit) {
+      break;
+    }
   }
 
-  const data = (await response.json()) as NominatimResult[];
-  return data.map(mapNominatimResult);
+  return dedupedResults;
 }
 
 export async function reverseGeocode(lat: number, lon: number): Promise<SearchResult | null> {
@@ -67,12 +93,12 @@ export async function reverseGeocode(lat: number, lon: number): Promise<SearchRe
     return null;
   }
 
-  return mapNominatimResult(data);
+  return rankSearchResult(mapNominatimResult(data), data.display_name, 0, 0);
 }
 
 export function searchResultToPointDraft(result: SearchResult, source: PointDraft["source"]): PointDraft {
   return {
-    id: createPointId(),
+    id: createStableId("point"),
     name: clampPointName(result.name, "Punto"),
     lat: result.lat,
     lon: result.lon,
@@ -86,7 +112,7 @@ export function searchResultToPointDraft(result: SearchResult, source: PointDraf
 
 export function buildFallbackPointDraft(lat: number, lon: number): PointDraft {
   return {
-    id: createPointId(),
+    id: createStableId("point"),
     name: "Punto manual",
     lat,
     lon,
@@ -141,10 +167,101 @@ function mapNominatimResult(result: NominatimResult): SearchResult {
   };
 }
 
-function createPointId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
+async function fetchSearchVariant(query: string, limit: number, rank: number) {
+  const params = new URLSearchParams({
+    q: query,
+    format: "jsonv2",
+    addressdetails: "1",
+    extratags: "1",
+    namedetails: "1",
+    limit: String(limit)
+  });
+
+  const response = await fetch(`${NOMINATIM_BASE_URL}/search?${params.toString()}`, {
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error("No se pudo consultar Nominatim. Intentalo de nuevo en unos segundos.");
   }
 
-  return `point-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const items = (await response.json()) as NominatimResult[];
+  return {
+    rank,
+    items
+  };
+}
+
+function buildSearchVariants(query: string) {
+  const normalized = query.trim();
+  const variants = [normalized];
+
+  if (!SACRED_KEYWORDS.test(normalized)) {
+    variants.unshift(
+      `${SACRED_SEARCH_PRESETS[0]} ${normalized}`,
+      `${SACRED_SEARCH_PRESETS[1]} ${normalized}`,
+      `${SACRED_SEARCH_PRESETS[2]} ${normalized}`
+    );
+  }
+
+  return Array.from(new Set(variants)).slice(0, 4);
+}
+
+function rankSearchResult(
+  result: SearchResult,
+  rawQuery: string,
+  queryRank: number,
+  itemIndex: number
+): SearchResult {
+  const normalizedQuery = rawQuery.toLowerCase();
+  const haystack = [
+    result.name,
+    result.displayName,
+    result.address,
+    result.placeType,
+    ...(result.metadata ? Object.values(result.metadata) : [])
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const sacredMatch = isSacredResult(result, haystack);
+  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+
+  let priorityScore = sacredMatch ? 120 : 0;
+  priorityScore += Math.max(0, 24 - queryRank * 8);
+  priorityScore += Math.max(0, 10 - itemIndex);
+
+  for (const token of queryTokens) {
+    if (haystack.includes(token)) {
+      priorityScore += 8;
+    }
+  }
+
+  if (result.name.toLowerCase() === normalizedQuery) {
+    priorityScore += 20;
+  } else if (result.name.toLowerCase().startsWith(normalizedQuery)) {
+    priorityScore += 12;
+  }
+
+  return {
+    ...result,
+    sacredMatch,
+    priorityScore
+  };
+}
+
+function isSacredResult(result: SearchResult, haystack: string) {
+  if (SACRED_KEYWORDS.test(haystack)) {
+    return true;
+  }
+
+  const placeType = result.placeType?.toLowerCase();
+
+  if (placeType && SACRED_TYPES.has(placeType)) {
+    return true;
+  }
+
+  const religion = result.metadata?.religion?.toLowerCase();
+  return religion === "christian";
 }
