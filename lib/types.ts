@@ -55,6 +55,16 @@ export type RouteLeg = {
   distanceMeters: number;
   durationSeconds: number;
   summary?: string;
+  steps?: RouteStep[];
+};
+
+export type RouteStep = {
+  distanceMeters: number;
+  durationSeconds: number;
+  streetName?: string;
+  instruction: string;
+  maneuverType?: string;
+  maneuverModifier?: string;
 };
 
 export type RouteSummary = {
