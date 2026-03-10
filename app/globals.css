@@ -97,3 +97,9 @@ a {
   background: var(--warm);
   border: 3px solid white;
 }
+
+.tour-marker__bubble--suggested {
+  color: #78350f;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  background: #fde68a;
+}
