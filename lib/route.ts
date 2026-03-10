@@ -5,6 +5,7 @@ import type {
   MatrixResult,
   OrderedStop,
   RouteLeg,
+  RouteStep,
   RouteSummary,
   TravelMode
 } from "./types";
@@ -17,10 +18,24 @@ type OsrmTableResponse = {
   message?: string;
 };
 
+type OsrmManeuver = {
+  type?: string;
+  modifier?: string;
+};
+
+type OsrmRouteStep = {
+  distance: number;
+  duration: number;
+  name?: string;
+  mode?: string;
+  maneuver?: OsrmManeuver;
+};
+
 type OsrmRouteLeg = {
   distance: number;
   duration: number;
   summary: string;
+  steps?: OsrmRouteStep[];
 };
 
 type OsrmRoute = {
@@ -181,7 +196,8 @@ export function computeLegSummaries(
       toIndex: index + 1,
       distanceMeters: distanceMeters ?? 0,
       durationSeconds: durationSeconds ?? 0,
-      summary: routeLeg?.summary
+      summary: routeLeg?.summary,
+      steps: routeLeg?.steps?.map(mapRouteStep) ?? []
     };
   });
 }
@@ -243,7 +259,7 @@ async function fetchRouteChunk(
 ): Promise<RouteFetchResult> {
   const coordinateString = buildCoordinateString(points);
   const profile = getOsrmProfile(travelMode);
-  const url = `${OSRM_BASE_URL}/route/v1/${profile}/${coordinateString}?overview=full&geometries=geojson&steps=false`;
+  const url = `${OSRM_BASE_URL}/route/v1/${profile}/${coordinateString}?overview=full&geometries=geojson&steps=true`;
   const response = await fetch(url, {
     cache: "no-store"
   });
@@ -316,4 +332,78 @@ function createRouteChunks(points: MapPoint[], chunkSize: number) {
 
 function getOsrmProfile(travelMode: TravelMode) {
   return travelMode === "driving" ? "driving" : "foot";
+}
+
+function mapRouteStep(step: OsrmRouteStep): RouteStep {
+  const maneuverType = step.maneuver?.type;
+  const maneuverModifier = step.maneuver?.modifier;
+  const streetName = step.name?.trim() ? step.name.trim() : undefined;
+
+  return {
+    distanceMeters: step.distance,
+    durationSeconds: step.duration,
+    streetName,
+    instruction: buildInstruction(maneuverType, maneuverModifier, streetName),
+    maneuverType,
+    maneuverModifier
+  };
+}
+
+function buildInstruction(
+  maneuverType?: string,
+  maneuverModifier?: string,
+  streetName?: string
+) {
+  const viaStreet = streetName ? ` por ${streetName}` : "";
+
+  switch (maneuverType) {
+    case "depart":
+      return `Sal de tu posicion${viaStreet}.`;
+    case "arrive":
+      return "Llegas al siguiente punto.";
+    case "turn":
+      return `Gira ${translateModifier(maneuverModifier)}${viaStreet}.`;
+    case "merge":
+      return `Incorporate ${translateModifier(maneuverModifier)}${viaStreet}.`;
+    case "fork":
+      return `Mantente ${translateModifier(maneuverModifier)} en la bifurcacion${viaStreet}.`;
+    case "end of road":
+      return `Al final de la via, gira ${translateModifier(maneuverModifier)}${viaStreet}.`;
+    case "new name":
+      return `Continua${viaStreet}.`;
+    case "continue":
+      return `Sigue recto${viaStreet}.`;
+    case "roundabout":
+    case "rotary":
+      return `En la rotonda, toma la salida indicada${viaStreet}.`;
+    case "on ramp":
+      return `Toma la rampa${viaStreet}.`;
+    case "off ramp":
+      return `Sal por la rampa${viaStreet}.`;
+    default:
+      return streetName ? `Avanza por ${streetName}.` : "Avanza al siguiente tramo.";
+  }
+}
+
+function translateModifier(modifier?: string) {
+  switch (modifier) {
+    case "left":
+      return "a la izquierda";
+    case "right":
+      return "a la derecha";
+    case "slight left":
+      return "ligeramente a la izquierda";
+    case "slight right":
+      return "ligeramente a la derecha";
+    case "sharp left":
+      return "bruscamente a la izquierda";
+    case "sharp right":
+      return "bruscamente a la derecha";
+    case "straight":
+      return "recto";
+    case "uturn":
+      return "en sentido contrario";
+    default:
+      return "segun la via";
+  }
 }
