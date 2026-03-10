@@ -1,4 +1,4 @@
-import { NOMINATIM_BASE_URL, SACRED_SEARCH_PRESETS, SEVILLE_CENTER } from "./constants";
+import { SACRED_SEARCH_PRESETS, SEVILLE_CENTER } from "./constants";
 import { normalizeUserError } from "./errors";
 import type { PointDraft, SearchBias, SearchResult } from "./types";
 import { clampPointName, createStableId } from "./utils";
@@ -18,6 +18,10 @@ type NominatimResult = {
 
 type SearchLocationsOptions = {
   bias?: SearchBias | null;
+};
+
+type ApiError = {
+  message?: string;
 };
 
 const SACRED_KEYWORDS = /(iglesia|parroquia|hermandad|cofradia|capilla|basilica|ermita|santuario|convento|templo|colegiata|catedral|church|chapel|cathedral|parish)/i;
@@ -177,7 +181,7 @@ export async function reverseGeocode(lat: number, lon: number): Promise<SearchRe
   });
 
   try {
-    const response = await fetch(`${NOMINATIM_BASE_URL}/reverse?${params.toString()}`, {
+    const response = await fetch(`/api/geocode/reverse?${params.toString()}`, {
       cache: "no-store"
     });
 
@@ -318,14 +322,17 @@ async function fetchSearchVariant(
   }
 
   try {
-    const response = await fetch(`${NOMINATIM_BASE_URL}/search?${params.toString()}`, {
-      cache: "no-store",
-      headers: {
-        "Accept-Language": "es"
-      }
+    const response = await fetch(`/api/geocode/search?${params.toString()}`, {
+      cache: "no-store"
     });
 
     if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as ApiError;
+
+      if (body.message?.trim()) {
+        throw new Error(body.message.trim());
+      }
+
       if (response.status === 429) {
         throw new Error("Nominatim esta limitando solicitudes temporalmente. Intenta en unos segundos.");
       }
