@@ -137,9 +137,11 @@ export default function TourPlanner() {
   const [manualPointOrder, setManualPointOrder] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRemoteStateReady, setIsRemoteStateReady] = useState(false);
+  const [remoteLoadNonce, setRemoteLoadNonce] = useState(0);
   const hasSyncErrorNoticeRef = useRef(false);
   const isRemoteSyncDisabledRef = useRef(false);
   const lastSyncedSnapshotRef = useRef<string | null>(null);
+  const remoteRevisionRef = useRef(0);
   const reverseLookupRef = useRef<{
     lat: number;
     lon: number;
@@ -260,6 +262,7 @@ export default function TourPlanner() {
 
   useEffect(() => {
     let ignore = false;
+    let retryTimeoutId: number | null = null;
 
     async function loadRemoteState() {
       try {
@@ -269,10 +272,20 @@ export default function TourPlanner() {
           return;
         }
 
-        if (remoteSnapshot) {
-          hydratePersistedState(remoteSnapshot);
-          lastSyncedSnapshotRef.current = JSON.stringify(remoteSnapshot);
+        remoteRevisionRef.current = Math.max(
+          remoteRevisionRef.current,
+          remoteSnapshot.revision
+        );
+
+        if (remoteSnapshot.data) {
+          hydratePersistedState(remoteSnapshot.data);
+          lastSyncedSnapshotRef.current = JSON.stringify(remoteSnapshot.data);
+        } else {
+          lastSyncedSnapshotRef.current = null;
         }
+
+        hasSyncErrorNoticeRef.current = false;
+        setIsRemoteStateReady(true);
       } catch (requestError) {
         if (ignore) {
           return;
@@ -286,14 +299,15 @@ export default function TourPlanner() {
 
         if (message.toLowerCase().includes("persistencia remota no configurada")) {
           isRemoteSyncDisabledRef.current = true;
+          setIsRemoteStateReady(true);
           return;
         }
 
+        setIsRemoteStateReady(false);
         setNotice(message);
-      } finally {
-        if (!ignore) {
-          setIsRemoteStateReady(true);
-        }
+        retryTimeoutId = window.setTimeout(() => {
+          setRemoteLoadNonce((current) => current + 1);
+        }, 6000);
       }
     }
 
@@ -301,8 +315,12 @@ export default function TourPlanner() {
 
     return () => {
       ignore = true;
+
+      if (retryTimeoutId) {
+        window.clearTimeout(retryTimeoutId);
+      }
     };
-  }, [hydratePersistedState, setNotice]);
+  }, [hydratePersistedState, remoteLoadNonce, setNotice]);
 
   useEffect(() => {
     if (!isRemoteStateReady || isRemoteSyncDisabledRef.current) {
@@ -318,7 +336,23 @@ export default function TourPlanner() {
     const timeoutId = window.setTimeout(() => {
       void (async () => {
         try {
-          await savePersistedTourState(persistedSnapshot);
+          const nextRevision = remoteRevisionRef.current + 1;
+          const saveResult = await savePersistedTourState(
+            persistedSnapshot,
+            undefined,
+            nextRevision
+          );
+          remoteRevisionRef.current = Math.max(
+            remoteRevisionRef.current,
+            nextRevision,
+            saveResult.revision
+          );
+
+          if (!saveResult.applied) {
+            setRemoteLoadNonce((current) => current + 1);
+            return;
+          }
+
           lastSyncedSnapshotRef.current = serializedSnapshot;
           hasSyncErrorNoticeRef.current = false;
         } catch (saveError) {
