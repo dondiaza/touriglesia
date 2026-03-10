@@ -1,6 +1,6 @@
 # TourIglesia
 
-Aplicacion web MVP para buscar hasta 25 ubicaciones, mostrarlas en un mapa, calcular un recorrido andando razonablemente eficiente y visualizar tanto la geometria como el detalle de las paradas.
+Aplicacion web para crear rutas entre iglesias, parroquias, hermandades y otros puntos de interes, visualizarlas en mapa y recalcularlas de forma rapida para ir a pie o en coche.
 
 ## Stack
 
@@ -8,10 +8,11 @@ Aplicacion web MVP para buscar hasta 25 ubicaciones, mostrarlas en un mapa, calc
 - TypeScript
 - Tailwind CSS 4
 - Leaflet + React Leaflet
-- Zustand
+- Zustand con persistencia local
 - OpenStreetMap tiles
-- Nominatim para geocodificacion
-- OSRM publico para matriz y rutas a pie
+- Nominatim para geocodificacion y busqueda
+- OSRM publico para matriz y rutas
+- GDELT publico para la pestaña de sugerencias diarias
 
 ## Requisitos
 
@@ -44,22 +45,28 @@ Importante: esta autenticacion es solo para demo. Las credenciales estan hardcod
 
 ```text
 app/
+  api/
+    cofradia-news/route.ts
   layout.tsx
   page.tsx
   login/page.tsx
 components/
+  HistoryPanel.tsx
   LoginForm.tsx
   MapView.tsx
   MapViewClient.tsx
   PointsList.tsx
   RouteSummary.tsx
   SearchBox.tsx
+  SuggestionsPanel.tsx
   TourPlanner.tsx
 lib/
   auth.ts
   constants.ts
   demo.ts
   geo.ts
+  news.ts
+  planner.ts
   route.ts
   tsp.ts
   types.ts
@@ -68,56 +75,71 @@ store/
   useTourStore.ts
 ```
 
+## Funcionalidades incluidas
+
+- Login demo con una unica pantalla protegida
+- Busqueda con autocompletar simple y prioridad para resultados cofrades y eclesiasticos
+- Atajos de busqueda rapida: Iglesia, Parroquia, Hermandad, Capilla y Basilica
+- Alta de puntos desde resultados de busqueda
+- Alta de puntos tocando o haciendo click en el mapa en desktop y mobile
+- Reverse geocoding para nombrar mejor los puntos anadidos desde el mapa
+- Edicion de nombre, centrado y eliminacion de puntos
+- Limite de 25 puntos
+- Selector de modo de viaje: a pie por defecto o coche
+- Generacion de ruta eficiente con matriz OSRM + nearest neighbor + 2-opt
+- Reordenacion manual de la ruta generada con recalculo inmediato
+- Historico local de rutas creadas y reajustadas
+- Marcadores renumerados segun el orden final
+- Preview flotante al pulsar un marcador del mapa
+- Polilinea del recorrido
+- Resumen de distancia, tiempo y tramos
+- Pestaña de sugerencias con resumen diario de noticias cofrades y navegacion por fechas
+- Boton demo Sevilla y boton limpiar
+
 ## Como funciona el calculo de ruta
 
-1. Se construye una matriz andando con OSRM Table Service (`buildWalkingMatrix`).
+1. Se construye una matriz de tiempos y distancias con OSRM Table Service (`buildTravelMatrix`).
 2. Se genera un orden inicial con nearest neighbor (`nearestNeighborRoute`).
 3. Se mejora localmente con 2-opt (`twoOptImprove`).
-4. Se convierten los indices a paradas ordenadas (`buildOrderedStops`).
-5. Se solicita la geometria real andando a OSRM Route Service (`fetchFullWalkingRoute`).
-6. Se calculan los tramos y totales (`computeLegSummaries` + `buildRouteSummary`).
+4. Se solicita la geometria real a OSRM Route Service (`fetchFullRoute`).
+5. Se calculan los tramos y totales (`computeLegSummaries` + `buildRouteSummary`).
+6. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle manteniendo ese nuevo orden.
 
 La heuristica busca un recorrido practico y rapido de calcular. No garantiza el TSP matematicamente optimo absoluto.
 
-## Funcionalidades incluidas
+## Historico y persistencia
 
-- Login demo con pantalla protegida
-- Mapa online centrado en Sevilla
-- Busqueda por texto con debounce usando Nominatim
-- Alta de puntos desde busqueda
-- Alta de puntos haciendo click en el mapa con reverse geocoding
-- Edicion de nombre
-- Eliminacion de puntos
-- Limite de 25 puntos
-- Boton para cargar demo Sevilla
-- Boton para limpiar todo
-- Generacion de recorrido andando
-- Marcadores renumerados segun el orden final
-- Polilinea del recorrido
-- Resumen total de distancia y tiempo
-- Detalle de cada tramo
-- Metadatos basicos por punto cuando existen
+- El historico de rutas y el modo de viaje activo se guardan en `localStorage` usando Zustand persist.
+- La ruta actual no se persiste completa como sesion de trabajo; el historico sirve como recuperacion rapida.
+- Cada reordenacion manual genera una nueva entrada en el historico.
+
+## Sugerencias diarias
+
+- La pestaña "Sugerencias" consulta un endpoint interno (`/api/cofradia-news`) que a su vez usa GDELT.
+- El objetivo es dar un resumen diario de titulares y contexto, no una agenda oficial exhaustiva.
+- Puedes consultar el dia actual, dias anteriores y dias posteriores.
 
 ## Limitaciones documentadas
 
 - La autenticacion demo no es segura.
 - Depende de servicios publicos externos y de la conectividad online.
-- Nominatim y OSRM pueden aplicar limites de uso, latencia o respuestas temporales inesperadas.
+- Nominatim, OSRM y GDELT pueden aplicar limites de uso, latencia o respuestas temporales inesperadas.
 - La optimizacion es heuristica: nearest neighbor + 2-opt. Es muy util para MVP, pero no garantiza el optimo matematico.
-- Si los servicios externos fallan, la aplicacion muestra errores amigables, pero no puede completar la ruta real.
+- La pestaña de sugerencias resume noticias publicas y no sustituye a una agenda oficial de hermandades o cofradias.
+- Si los servicios externos fallan, la aplicacion muestra errores amigables, pero no puede completar la busqueda, la ruta o el resumen del dia.
 
 ## Mejoras futuras
 
-- Reordenacion manual drag and drop
-- Persistencia local o en base de datos
+- Reordenacion drag and drop
+- Seleccion explicita del punto inicial y final
 - Exportacion GPX o PDF
-- Seleccion explicita del punto inicial
-- Cache y rate limiting propios
-- Autenticacion real
+- Cache propia para Nominatim y OSRM
+- Integracion con agenda oficial o feed especializado para eventos cofrades
+- Autenticacion real y gestion multiusuario
 
 ## Notas de integracion
 
-- Los endpoints de Nominatim y OSRM estan centralizados en `lib/constants.ts`.
+- Los endpoints de Nominatim, OSRM y GDELT estan centralizados en `lib/constants.ts`.
 - La ruta completa se segmenta si el numero de coordenadas crece demasiado para una sola llamada a OSRM.
-- El proyecto esta pensado para ejecutarse con `npm install` y `npm run dev` sin backend adicional.
-- La version desplegada puede quedar enlazada a un dominio personalizado en Vercel sin cambiar el codigo.
+- La autenticacion es solo para demo y no debe reutilizarse en produccion.
+- El proyecto esta pensado para ejecutarse con `npm install` y `npm run dev` sin backend complejo ni base de datos.
