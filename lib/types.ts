@@ -164,3 +164,18 @@ export type PersistedTourState = {
   activeStopIndex: number;
   nextPointOrder: number;
 };
+
+export type PersistedStateEnvelope = {
+  key: string;
+  data: PersistedTourState | null;
+  revision: number;
+  updatedAt?: string | null;
+};
+
+export type PersistedStateSaveResult = {
+  key: string;
+  saved: boolean;
+  applied: boolean;
+  revision: number;
+  updatedAt?: string | null;
+};
