@@ -15,8 +15,7 @@ import {
   applyStopsToPoints,
   buildHistoryLabel,
   buildPointIndexLookup,
-  createStableId,
-  reorderItems
+  createStableId
 } from "./utils";
 
 type PlannerResult = {
@@ -79,31 +78,29 @@ export async function rebuildRouteFromManualOrder(
   };
 }
 
-export function moveRouteStop(pointOrder: string[], pointId: string, direction: "up" | "down") {
-  const currentIndex = pointOrder.indexOf(pointId);
-
-  if (currentIndex === -1) {
-    return pointOrder;
-  }
-
-  const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-
-  if (targetIndex < 0 || targetIndex >= pointOrder.length) {
-    return pointOrder;
-  }
-
-  return reorderItems(pointOrder, currentIndex, targetIndex);
-}
-
 export function buildRouteHistoryEntry(
   pointsSnapshot: MapPoint[],
   orderedStops: OrderedStop[],
-  routeSummary: RouteSummary
+  routeSummary: RouteSummary,
+  routeName?: string,
+  savedBy?: string
 ): RouteHistoryEntry {
+  const normalizedRouteName = routeName?.trim();
+  const normalizedSavedBy = savedBy?.trim();
+  const fallbackLabel = buildHistoryLabel(pointsSnapshot, routeSummary);
+  const label =
+    normalizedRouteName && normalizedSavedBy
+      ? `${normalizedRouteName} (${normalizedSavedBy})`
+      : normalizedRouteName
+        ? normalizedRouteName
+        : fallbackLabel;
+
   return {
     id: createStableId("route"),
-    label: buildHistoryLabel(pointsSnapshot, routeSummary),
-    createdAt: routeSummary.generatedAt,
+    label,
+    routeName: normalizedRouteName,
+    savedBy: normalizedSavedBy,
+    createdAt: new Date().toISOString(),
     travelMode: routeSummary.travelMode,
     orderedStops,
     routeSummary,
