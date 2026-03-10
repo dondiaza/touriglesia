@@ -10,7 +10,7 @@ export default function MapsDemoPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
             TourIglesia
           </p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Maps Demo</h1>
+          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Demostracion de mapas</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
             Comparativa de motores de mapas instalados y listos para usar en el proyecto.
           </p>
