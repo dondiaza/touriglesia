@@ -270,14 +270,23 @@ export default function TourPlanner() {
 
       if (!outcome.ok) {
         setError(outcome.error || "No se pudo anadir el punto desde el mapa.");
+      } else if (!reverseResult) {
+        setNotice("Punto anadido por coordenadas. No se pudo resolver direccion en este momento.");
       }
     } catch (mapError) {
-      const message =
-        mapError instanceof Error
-          ? mapError.message
-          : "No se pudo resolver la ubicacion del click.";
+      const draft = buildMapPointDraftFromReverse(lat, lon, null);
+      const outcome = addPoint(draft);
 
-      setError(message);
+      if (!outcome.ok) {
+        const message =
+          mapError instanceof Error
+            ? mapError.message
+            : "No se pudo anadir el punto desde el mapa.";
+
+        setError(message);
+      } else {
+        setNotice("Punto anadido con fallback por coordenadas. Nominatim no respondio.");
+      }
     } finally {
       setIsResolvingClick(false);
     }
