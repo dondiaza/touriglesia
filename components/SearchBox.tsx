@@ -3,6 +3,7 @@
 import { startTransition, useEffect, useState } from "react";
 
 import { SACRED_SEARCH_PRESETS, SEARCH_DEBOUNCE_MS } from "@/lib/constants";
+import { normalizeUserError } from "@/lib/errors";
 import { searchLocations } from "@/lib/geo";
 import type { SearchBias, SearchResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -58,10 +59,11 @@ export default function SearchBox({
           return;
         }
 
-        const message =
-          searchError instanceof Error
-            ? searchError.message
-            : "No se pudo buscar la ubicacion.";
+        const message = normalizeUserError(
+          searchError,
+          "No se pudo buscar la ubicacion.",
+          "No se pudo conectar con el buscador de ubicaciones."
+        );
 
         startTransition(() => {
           setResults([]);
