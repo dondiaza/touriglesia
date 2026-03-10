@@ -129,8 +129,9 @@ export default function MapViewClient({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
+        <MapSizeInvalidator />
         <MapClickHandler onMapClick={handleMapSelect} />
-        <AutoBounds points={points} routeGeometry={routeGeometry} />
+        <AutoBounds points={points} routeGeometry={routeGeometry} userLocation={userLocation} />
         <FocusController mapFocus={mapFocus} />
 
         {routeGeometry.length > 1 ? (
@@ -348,12 +349,53 @@ function FocusController({ mapFocus }: { mapFocus: MapFocus | null }) {
   return null;
 }
 
+function MapSizeInvalidator() {
+  const map = useMap();
+
+  useEffect(() => {
+    let frameId: number | null = null;
+    const refreshMapSize = () => {
+      map.invalidateSize({
+        pan: false,
+        animate: false
+      });
+    };
+
+    const mountTimeoutId = window.setTimeout(refreshMapSize, 0);
+    const onResize = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        refreshMapSize();
+        frameId = null;
+      });
+    };
+
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.clearTimeout(mountTimeoutId);
+      window.removeEventListener("resize", onResize);
+
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [map]);
+
+  return null;
+}
+
 function AutoBounds({
   points,
-  routeGeometry
+  routeGeometry,
+  userLocation
 }: {
   points: MapPoint[];
   routeGeometry: Array<[number, number]>;
+  userLocation: UserLocation | null;
 }) {
   const map = useMap();
 
@@ -380,8 +422,13 @@ function AutoBounds({
       return;
     }
 
+    if (userLocation) {
+      map.setView([userLocation.lat, userLocation.lon], 15);
+      return;
+    }
+
     map.setView(SEVILLE_CENTER, DEFAULT_MAP_ZOOM);
-  }, [map, points, routeGeometry]);
+  }, [map, points, routeGeometry, userLocation]);
 
   return null;
 }
