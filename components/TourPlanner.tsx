@@ -11,14 +11,15 @@ import SearchBox from "@/components/SearchBox";
 import SuggestionsPanel from "@/components/SuggestionsPanel";
 import { clearAuthCookie } from "@/lib/auth";
 import { MAX_POINTS } from "@/lib/constants";
-import { buildFallbackPointDraft, reverseGeocode, searchResultToPointDraft } from "@/lib/geo";
+import { buildMapPointDraftFromReverse, reverseGeocode, searchResultToPointDraft } from "@/lib/geo";
+import { KEY_SITE_SUGGESTIONS, SUGGESTED_CATEGORY_LABELS } from "@/lib/keySites";
 import {
   buildRouteHistoryEntry,
   generateOptimizedRoute,
   moveRouteStop,
   rebuildRouteFromManualOrder
 } from "@/lib/planner";
-import type { SearchResult, TravelMode } from "@/lib/types";
+import type { SearchResult, SuggestedPlace, TravelMode } from "@/lib/types";
 import { cn, formatDistance, formatDuration, formatTravelMode } from "@/lib/utils";
 import { useTourStore } from "@/store/useTourStore";
 
@@ -50,6 +51,8 @@ export default function TourPlanner() {
   const removeHistoryEntry = useTourStore((state) => state.removeHistoryEntry);
 
   const [activeTab, setActiveTab] = useState<SideTab>("planner");
+  const [activeSuggestionCategory, setActiveSuggestionCategory] = useState<SuggestedPlace["category"] | "all">("all");
+  const [visibleSuggestionIds, setVisibleSuggestionIds] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isResolvingClick, setIsResolvingClick] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,9 +77,7 @@ export default function TourPlanner() {
 
     try {
       const reverseResult = await reverseGeocode(lat, lon);
-      const draft = reverseResult
-        ? searchResultToPointDraft(reverseResult, "map")
-        : buildFallbackPointDraft(lat, lon);
+      const draft = buildMapPointDraftFromReverse(lat, lon, reverseResult);
       const outcome = addPoint(draft);
 
       if (!outcome.ok) {
@@ -195,6 +196,49 @@ export default function TourPlanner() {
     setNotice(null);
     clearAll();
   }
+
+  function handleToggleSuggestionVisibility(suggestion: SuggestedPlace) {
+    setVisibleSuggestionIds((current) => {
+      if (current.includes(suggestion.id)) {
+        return current.filter((id) => id !== suggestion.id);
+      }
+
+      return [...current, suggestion.id];
+    });
+  }
+
+  async function handleAddSuggestedPlaceToRoute(suggestion: SuggestedPlace) {
+    if (points.length >= MAX_POINTS) {
+      setError(`Has alcanzado el maximo de ${MAX_POINTS} puntos.`);
+      return;
+    }
+
+    const outcome = addPoint({
+      id: `suggested-${suggestion.id}-${Date.now()}`,
+      name: suggestion.name,
+      lat: suggestion.lat,
+      lon: suggestion.lon,
+      address: suggestion.address,
+      displayName: suggestion.name,
+      placeType: suggestion.category,
+      metadata: suggestion.description ? { description: suggestion.description } : undefined,
+      source: "demo"
+    });
+
+    if (!outcome.ok) {
+      setError(outcome.error || "No se pudo anadir la sugerencia a la ruta.");
+    }
+  }
+
+  const filteredSuggestions = KEY_SITE_SUGGESTIONS.filter((site) => {
+    if (activeSuggestionCategory === "all") {
+      return true;
+    }
+
+    return site.category === activeSuggestionCategory;
+  });
+
+  const visibleSuggestions = KEY_SITE_SUGGESTIONS.filter((site) => visibleSuggestionIds.includes(site.id));
 
   const isBusy = isGenerating || isResolvingClick;
   const canGenerate = points.length >= 2 && !isBusy;
@@ -399,6 +443,79 @@ export default function TourPlanner() {
           </aside>
 
           <section className="space-y-4">
+            <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+                  Sugerencias sobre mapa
+                </p>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Iglesias, interes cofrade y cervecerias
+                </h2>
+                <p className="text-sm leading-6 text-[var(--muted)]">
+                  Marca una sugerencia para pintarla en el mapa. Luego puedes seleccionarla y
+                  anadirla a la ruta desde su ficha.
+                </p>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  className={cn(
+                    "rounded-full border px-3 py-2 text-sm font-semibold transition",
+                    activeSuggestionCategory === "all"
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                  )}
+                  onClick={() => setActiveSuggestionCategory("all")}
+                  type="button"
+                >
+                  Todas
+                </button>
+                {(Object.keys(SUGGESTED_CATEGORY_LABELS) as SuggestedPlace["category"][]).map((category) => (
+                  <button
+                    className={cn(
+                      "rounded-full border px-3 py-2 text-sm font-semibold transition",
+                      activeSuggestionCategory === category
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                    )}
+                    key={category}
+                    onClick={() => setActiveSuggestionCategory(category)}
+                    type="button"
+                  >
+                    {SUGGESTED_CATEGORY_LABELS[category]}
+                  </button>
+                ))}
+              </div>
+
+              <ul className="tour-scrollbar mt-3 max-h-44 space-y-2 overflow-y-auto pr-1">
+                {filteredSuggestions.map((suggestion) => {
+                  const isVisible = visibleSuggestionIds.includes(suggestion.id);
+                  return (
+                    <li className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2" key={suggestion.id}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900">{suggestion.name}</p>
+                          <p className="mt-1 text-sm text-[var(--muted)]">{suggestion.address}</p>
+                        </div>
+                        <button
+                          className={cn(
+                            "shrink-0 rounded-xl border px-3 py-2 text-sm font-semibold transition",
+                            isVisible
+                              ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                          )}
+                          onClick={() => handleToggleSuggestionVisibility(suggestion)}
+                          type="button"
+                        >
+                          {isVisible ? "Ocultar" : "Mostrar"}
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+
             <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-3 shadow-[var(--shadow)]">
               <div className="mb-3 flex items-center justify-between px-1 pt-1">
                 <div>
@@ -412,9 +529,12 @@ export default function TourPlanner() {
               <MapView
                 isResolvingMapPoint={isResolvingClick}
                 mapFocus={mapFocus}
+                onAddSuggestionToRoute={handleAddSuggestedPlaceToRoute}
                 onMapClick={handleMapClick}
+                onRemovePoint={removePoint}
                 points={points}
                 routeGeometry={routeGeometry}
+                suggestionPoints={visibleSuggestions}
               />
             </section>
 
