@@ -12,7 +12,7 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
   const pointLookup = new Map(points.map((point) => [point.id, point]));
 
   return (
-    <section className="rounded-[24px] border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)] backdrop-blur">
+    <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
       <div className="mb-4">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
           Resumen
@@ -20,6 +20,9 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
         <h2 className="mt-2 font-display text-xl font-semibold text-slate-900">
           Recorrido generado
         </h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">
+          Consulta el orden final de visita, la distancia total y el detalle de cada tramo.
+        </p>
       </div>
 
       {!routeSummary ? (
@@ -30,7 +33,7 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl bg-white/80 p-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
                 Puntos
               </p>
@@ -38,7 +41,7 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
                 {routeSummary.pointOrder.length}
               </p>
             </div>
-            <div className="rounded-2xl bg-white/80 p-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
                 Distancia total
               </p>
@@ -46,7 +49,7 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
                 {formatDistance(routeSummary.totalDistanceMeters)}
               </p>
             </div>
-            <div className="rounded-2xl bg-white/80 p-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
                 Tiempo total
               </p>
@@ -64,10 +67,7 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
                 const toPoint = pointLookup.get(leg.toPointId);
 
                 return (
-                  <li
-                    className="rounded-2xl border border-slate-200 bg-white/80 p-3"
-                    key={`${leg.fromPointId}-${leg.toPointId}-${leg.fromIndex}`}
-                  >
+                  <li className="rounded-2xl border border-slate-200 bg-slate-50 p-3" key={`${leg.fromPointId}-${leg.toPointId}-${leg.fromIndex}`}>
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-semibold text-slate-900">
