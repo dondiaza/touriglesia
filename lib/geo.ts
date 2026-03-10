@@ -1,5 +1,5 @@
 import { NOMINATIM_BASE_URL, SACRED_SEARCH_PRESETS } from "./constants";
-import type { PointDraft, SearchResult } from "./types";
+import type { PointDraft, SearchBias, SearchResult } from "./types";
 import { clampPointName, createStableId } from "./utils";
 
 type NominatimResult = {
@@ -15,6 +15,10 @@ type NominatimResult = {
   extratags?: Record<string, string>;
 };
 
+type SearchLocationsOptions = {
+  bias?: SearchBias | null;
+};
+
 const SACRED_KEYWORDS = /(iglesia|parroquia|hermandad|cofradia|capilla|basilica|ermita|santuario|convento|templo|colegiata|catedral|church|chapel|cathedral|parish)/i;
 const SACRED_TYPES = new Set([
   "church",
@@ -26,7 +30,11 @@ const SACRED_TYPES = new Set([
   "shrine"
 ]);
 
-export async function searchLocations(query: string, limit = 6): Promise<SearchResult[]> {
+export async function searchLocations(
+  query: string,
+  limit = 6,
+  options?: SearchLocationsOptions
+): Promise<SearchResult[]> {
   const normalized = query.trim();
 
   if (normalized.length < 3) {
@@ -35,12 +43,16 @@ export async function searchLocations(query: string, limit = 6): Promise<SearchR
 
   const queries = buildSearchVariants(normalized);
   const responses = await Promise.all(
-    queries.map((searchQuery, index) => fetchSearchVariant(searchQuery, limit, index))
+    queries.map((searchQuery, index) =>
+      fetchSearchVariant(searchQuery, limit, index, options?.bias || null)
+    )
   );
 
   const rankedResults = responses
     .flatMap((response) =>
-      response.items.map((item, itemIndex) => rankSearchResult(mapNominatimResult(item), normalized, response.rank, itemIndex))
+      response.items.map((item, itemIndex) =>
+        rankSearchResult(mapNominatimResult(item), normalized, response.rank, itemIndex, options?.bias || null)
+      )
     )
     .sort((left, right) => {
       if ((right.priorityScore ?? 0) !== (left.priorityScore ?? 0)) {
@@ -54,6 +66,67 @@ export async function searchLocations(query: string, limit = 6): Promise<SearchR
   const seenIds = new Set<string>();
 
   for (const result of rankedResults) {
+    if (seenIds.has(result.id)) {
+      continue;
+    }
+
+    seenIds.add(result.id);
+    dedupedResults.push(result);
+
+    if (dedupedResults.length >= limit) {
+      break;
+    }
+  }
+
+  return dedupedResults;
+}
+
+export async function fetchNearbyInterest(
+  lat: number,
+  lon: number,
+  limit = 8
+): Promise<SearchResult[]> {
+  const queries = [
+    "iglesia",
+    "hermandad",
+    "cofradia",
+    "capilla",
+    "cerveceria"
+  ];
+
+  const responses = await Promise.all(
+    queries.map((query, index) =>
+      fetchSearchVariant(
+        query,
+        Math.max(3, Math.ceil(limit / 2)),
+        index,
+        {
+          lat,
+          lon,
+          radiusKm: 3.5,
+          bounded: true
+        }
+      )
+    )
+  );
+
+  const flattened = responses
+    .flatMap((response) =>
+      response.items.map((item, itemIndex) =>
+        rankSearchResult(mapNominatimResult(item), queries[response.rank] || "", response.rank, itemIndex, {
+          lat,
+          lon,
+          radiusKm: 3.5,
+          bounded: true
+        })
+      )
+    )
+    .sort((left, right) => (right.priorityScore ?? 0) - (left.priorityScore ?? 0));
+
+  const dedupedResults: SearchResult[] = [];
+  const seenIds = new Set<string>();
+
+  for (const result of flattened) {
     if (seenIds.has(result.id)) {
       continue;
     }
@@ -93,7 +166,7 @@ export async function reverseGeocode(lat: number, lon: number): Promise<SearchRe
     return null;
   }
 
-  return rankSearchResult(mapNominatimResult(data), data.display_name, 0, 0);
+  return rankSearchResult(mapNominatimResult(data), data.display_name, 0, 0, null);
 }
 
 export function searchResultToPointDraft(result: SearchResult, source: PointDraft["source"]): PointDraft {
@@ -177,6 +250,14 @@ function mapNominatimResult(result: NominatimResult): SearchResult {
     metadata.website = result.extratags.website;
   }
 
+  if (result.address?.country_code) {
+    metadata.countryCode = result.address.country_code.toUpperCase();
+  }
+
+  if (result.address?.city || result.address?.town || result.address?.village) {
+    metadata.cityLabel = result.address.city || result.address.town || result.address.village;
+  }
+
   return {
     id: `nominatim-${result.place_id}`,
     name: clampPointName(primaryName, "Punto"),
@@ -189,7 +270,12 @@ function mapNominatimResult(result: NominatimResult): SearchResult {
   };
 }
 
-async function fetchSearchVariant(query: string, limit: number, rank: number) {
+async function fetchSearchVariant(
+  query: string,
+  limit: number,
+  rank: number,
+  bias: SearchBias | null
+) {
   const params = new URLSearchParams({
     q: query,
     format: "jsonv2",
@@ -199,8 +285,15 @@ async function fetchSearchVariant(query: string, limit: number, rank: number) {
     limit: String(limit)
   });
 
+  if (bias) {
+    applyBiasParams(params, bias);
+  }
+
   const response = await fetch(`${NOMINATIM_BASE_URL}/search?${params.toString()}`, {
-    cache: "no-store"
+    cache: "no-store",
+    headers: {
+      "Accept-Language": "es"
+    }
   });
 
   if (!response.ok) {
@@ -212,6 +305,30 @@ async function fetchSearchVariant(query: string, limit: number, rank: number) {
     rank,
     items
   };
+}
+
+function applyBiasParams(params: URLSearchParams, bias: SearchBias) {
+  const radiusKm = Math.min(20, Math.max(2, bias.radiusKm || 8));
+  const [left, top, right, bottom] = getViewBox(bias.lat, bias.lon, radiusKm);
+  params.set("viewbox", `${left},${top},${right},${bottom}`);
+
+  if (bias.bounded) {
+    params.set("bounded", "1");
+  }
+
+  if (bias.countryCode) {
+    params.set("countrycodes", bias.countryCode.toLowerCase());
+  }
+}
+
+function getViewBox(lat: number, lon: number, radiusKm: number) {
+  const latDelta = radiusKm / 111.32;
+  const lonDelta = radiusKm / (111.32 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+  const left = lon - lonDelta;
+  const right = lon + lonDelta;
+  const top = lat + latDelta;
+  const bottom = lat - latDelta;
+  return [left, top, right, bottom];
 }
 
 function buildSearchVariants(query: string) {
@@ -233,7 +350,8 @@ function rankSearchResult(
   result: SearchResult,
   rawQuery: string,
   queryRank: number,
-  itemIndex: number
+  itemIndex: number,
+  bias: SearchBias | null
 ): SearchResult {
   const normalizedQuery = rawQuery.toLowerCase();
   const haystack = [
@@ -255,7 +373,7 @@ function rankSearchResult(
   priorityScore += Math.max(0, 10 - itemIndex);
 
   for (const token of queryTokens) {
-    if (haystack.includes(token)) {
+    if (token && haystack.includes(token)) {
       priorityScore += 8;
     }
   }
@@ -266,11 +384,43 @@ function rankSearchResult(
     priorityScore += 12;
   }
 
+  if (bias?.countryCode) {
+    const resultCountryCode = result.metadata?.countryCode?.toUpperCase();
+    if (resultCountryCode === bias.countryCode.toUpperCase()) {
+      priorityScore += 16;
+    }
+  }
+
+  if (bias) {
+    const distancePenalty = distanceBiasPenalty(result.lat, result.lon, bias.lat, bias.lon);
+    priorityScore -= distancePenalty;
+  }
+
   return {
     ...result,
     sacredMatch,
     priorityScore
   };
+}
+
+function distanceBiasPenalty(resultLat: number, resultLon: number, biasLat: number, biasLon: number) {
+  const dLat = resultLat - biasLat;
+  const dLon = resultLon - biasLon;
+  const approxKm = Math.sqrt(dLat * dLat + dLon * dLon) * 111;
+
+  if (approxKm <= 3) {
+    return 0;
+  }
+
+  if (approxKm <= 10) {
+    return 8;
+  }
+
+  if (approxKm <= 40) {
+    return 25;
+  }
+
+  return 70;
 }
 
 function isSacredResult(result: SearchResult, haystack: string) {
