@@ -1,5 +1,6 @@
 param(
-  [string]$BaseUrl = "https://touriglesia.panojotro.com"
+  [string]$BaseUrl = "https://touriglesia.panojotro.com",
+  [switch]$WriteSample
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,9 +48,15 @@ $getResult = Invoke-Json -Method Get -Uri ($BaseUrl + "/api/state")
 Write-Output ("GET_STATUS={0}" -f $getResult.status)
 Write-Output ("GET_BODY={0}" -f $getResult.content)
 
+if (-not $WriteSample) {
+  Write-Output "POST_SKIPPED=Usa -WriteSample para probar escritura."
+  exit 0
+}
+
 $sampleState = @{
-  key  = "iglesia"
-  data = @{
+  key      = "iglesia"
+  revision = 1
+  data     = @{
     points = @()
     orderedStops = @()
     routeSummary = $null
