@@ -14,23 +14,26 @@ export default function HistoryPanel({ entries, onRestore, onRemove }: HistoryPa
     <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
       <div className="mb-4 space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
-          Historico
+          Rutas guardadas
         </p>
         <h2 className="text-xl font-semibold text-slate-900">Rutas guardadas</h2>
         <p className="text-sm leading-6 text-[var(--muted)]">
-          Cada ruta generada o reajustada queda guardada localmente en este navegador.
+          Guarda manualmente tus rutas con nombre y usuario para recuperarlas cuando lo necesites.
         </p>
       </div>
 
       {entries.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-5 text-sm leading-6 text-[var(--muted)]">
-          Aun no hay rutas guardadas. Genera la primera y aparecera aqui.
+          Aun no hay rutas guardadas. Genera una ruta y pulsa "Guardar ruta".
         </p>
       ) : (
         <ul className="tour-scrollbar max-h-80 space-y-3 overflow-y-auto pr-1">
           {entries.map((entry) => (
             <li className="rounded-2xl border border-slate-200 bg-slate-50 p-3" key={entry.id}>
-              <p className="font-semibold text-slate-900">{entry.label}</p>
+              <p className="font-semibold text-slate-900">{entry.routeName || entry.label}</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                Usuario: <span className="font-medium text-slate-700">{entry.savedBy || "Sin usuario"}</span>
+              </p>
               <p className="mt-1 text-sm text-[var(--muted)]">
                 {new Intl.DateTimeFormat("es-ES", { dateStyle: "short", timeStyle: "short" }).format(
                   new Date(entry.createdAt)
