@@ -15,18 +15,17 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
     <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
       <div className="mb-4 space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
-          Resumen
+          Resumen principal
         </p>
-        <h2 className="text-xl font-semibold text-slate-900">Recorrido generado</h2>
+        <h2 className="text-xl font-semibold text-slate-900">Guia del recorrido</h2>
         <p className="text-sm leading-6 text-[var(--muted)]">
-          Consulta el orden final, el modo de desplazamiento y el detalle de cada tramo.
+          Incluye distancia entre puntos y pasos por calle para guiarte con giros y tramos.
         </p>
       </div>
 
       {!routeSummary ? (
         <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-5 text-sm leading-6 text-[var(--muted)]">
-          Cuando tengas al menos 2 puntos, genera una ruta para ver distancias, tiempos y el orden
-          recomendado.
+          Genera una ruta para ver la guia completa con tramos y pasos de navegacion.
         </p>
       ) : (
         <>
@@ -49,7 +48,7 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                Distancia
+                Distancia total
               </p>
               <p className="mt-2 text-2xl font-semibold text-slate-900">
                 {formatDistance(routeSummary.totalDistanceMeters)}
@@ -57,7 +56,7 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                Tiempo
+                Tiempo total
               </p>
               <p className="mt-2 text-2xl font-semibold text-slate-900">
                 {formatDuration(routeSummary.totalDurationSeconds)}
@@ -73,18 +72,19 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
           </p>
 
           <div className="mt-5">
-            <h3 className="text-lg font-semibold text-slate-900">Tramos</h3>
-            <ul className="tour-scrollbar mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
+            <h3 className="text-lg font-semibold text-slate-900">Tramos y pasos</h3>
+            <ul className="tour-scrollbar mt-3 max-h-[34rem] space-y-3 overflow-y-auto pr-1">
               {routeSummary.legs.map((leg) => {
                 const fromPoint = pointLookup.get(leg.fromPointId);
                 const toPoint = pointLookup.get(leg.toPointId);
+                const steps = leg.steps ?? [];
 
                 return (
                   <li
                     className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
                     key={`${leg.fromPointId}-${leg.toPointId}-${leg.fromIndex}`}
                   >
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-slate-900">
                           {leg.fromIndex + 1} -&gt; {leg.toIndex + 1}
@@ -100,6 +100,23 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
                         <p>{formatDuration(leg.durationSeconds)}</p>
                       </div>
                     </div>
+
+                    {steps.length > 0 ? (
+                      <ol className="mt-3 space-y-2 border-l-2 border-[var(--accent-soft)] pl-4">
+                        {steps.map((step, stepIndex) => (
+                          <li className="text-sm text-slate-700" key={`${leg.fromPointId}-${leg.toPointId}-step-${stepIndex}`}>
+                            <p>{step.instruction}</p>
+                            <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
+                              {formatDistance(step.distanceMeters)} · {formatDuration(step.durationSeconds)}
+                            </p>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p className="mt-3 text-sm text-[var(--muted)]">
+                        No hay pasos detallados para este tramo.
+                      </p>
+                    )}
                   </li>
                 );
               })}
