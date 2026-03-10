@@ -1,4 +1,4 @@
-import { NOMINATIM_BASE_URL, SACRED_SEARCH_PRESETS } from "./constants";
+import { NOMINATIM_BASE_URL, SACRED_SEARCH_PRESETS, SEVILLE_CENTER } from "./constants";
 import { normalizeUserError } from "./errors";
 import type { PointDraft, SearchBias, SearchResult } from "./types";
 import { clampPointName, createStableId } from "./utils";
@@ -21,6 +21,7 @@ type SearchLocationsOptions = {
 };
 
 const SACRED_KEYWORDS = /(iglesia|parroquia|hermandad|cofradia|capilla|basilica|ermita|santuario|convento|templo|colegiata|catedral|church|chapel|cathedral|parish)/i;
+const SEVILLE_KEYWORDS = /(sevilla)/i;
 const SACRED_TYPES = new Set([
   "church",
   "chapel",
@@ -42,7 +43,7 @@ export async function searchLocations(
     return [];
   }
 
-  const queries = buildSearchVariants(normalized);
+  const queries = buildSearchVariants(normalized, options?.bias || null);
   const settledResponses = await Promise.allSettled(
     queries.map((searchQuery, index) =>
       fetchSearchVariant(searchQuery, limit, index, options?.bias || null)
@@ -372,9 +373,13 @@ function getViewBox(lat: number, lon: number, radiusKm: number) {
   return [left, top, right, bottom];
 }
 
-function buildSearchVariants(query: string) {
+function buildSearchVariants(query: string, bias: SearchBias | null) {
   const normalized = query.trim();
   const variants = [normalized];
+
+  if (!SEVILLE_KEYWORDS.test(normalized) && isBiasNearSeville(bias)) {
+    variants.unshift(`${normalized} Sevilla`);
+  }
 
   if (!SACRED_KEYWORDS.test(normalized)) {
     variants.unshift(
@@ -407,9 +412,11 @@ function rankSearchResult(
     .toLowerCase();
 
   const sacredMatch = isSacredResult(result, haystack);
+  const sevilleMatch = isSevilleResult(result, haystack);
   const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
 
   let priorityScore = sacredMatch ? 120 : 0;
+  priorityScore += sevilleMatch ? (isBiasNearSeville(bias) ? 30 : 12) : 0;
   priorityScore += Math.max(0, 24 - queryRank * 8);
   priorityScore += Math.max(0, 10 - itemIndex);
 
@@ -477,4 +484,23 @@ function isSacredResult(result: SearchResult, haystack: string) {
 
   const religion = result.metadata?.religion?.toLowerCase();
   return religion === "christian";
+}
+
+function isSevilleResult(result: SearchResult, haystack: string) {
+  if (SEVILLE_KEYWORDS.test(haystack)) {
+    return true;
+  }
+
+  const cityLabel = result.metadata?.cityLabel?.toLowerCase();
+  return cityLabel === "sevilla";
+}
+
+function isBiasNearSeville(bias: SearchBias | null) {
+  if (!bias) {
+    return false;
+  }
+
+  const sevilleLat = SEVILLE_CENTER[0];
+  const sevilleLon = SEVILLE_CENTER[1];
+  return Math.abs(bias.lat - sevilleLat) < 0.6 && Math.abs(bias.lon - sevilleLon) < 0.6;
 }
