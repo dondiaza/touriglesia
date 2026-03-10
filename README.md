@@ -15,7 +15,7 @@ Aplicacion web para crear rutas entre iglesias, parroquias, hermandades y otros 
 - Zustand con persistencia local
 - OpenStreetMap tiles
 - Nominatim para geocodificacion y busqueda
-- OSRM publico para matriz y rutas
+- OSRM publico para matriz y rutas peatonales
 - GDELT publico para la pestaña de sugerencias diarias
 
 ## Requisitos
@@ -124,16 +124,16 @@ app/
 ## Como funciona el calculo de ruta
 
 1. Se construye una matriz de tiempos y distancias con OSRM Table Service (`buildTravelMatrix`).
-2. Se usa metrica de optimizacion por `distance` para priorizar el tramo peatonal mas corto.
+2. Se usa metrica de optimizacion por `distance` para priorizar distancia peatonal minima.
 3. Se genera y evalua un orden inicial desde multiples puntos de arranque con nearest neighbor.
 4. Se mejora localmente con 2-opt y se selecciona el mejor coste total (`selectBestOpenRoute`).
-5. Se consulta OSRM Trip Service y se compara contra la heuristica local para elegir el orden mas corto disponible.
-6. Se solicita la geometria real a OSRM Route Service (`fetchFullRoute`).
-7. En modo a pie, la geometria se calcula tramo a tramo (punto A -> punto B) para forzar el camino mas corto de cada salto.
-8. En cada tramo andando se piden alternativas y se selecciona la de menor distancia total.
-9. El trazado por tramo permite volver por la misma calle si compensa (`continue_straight=false`).
-10. Se calculan los tramos y pasos de navegacion por calle (`computeLegSummaries` + `buildRouteSummary`).
-11. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle manteniendo ese nuevo orden.
+5. Se solicita la geometria real a OSRM Route Service (`fetchFullRoute`) usando proveedor peatonal libre.
+6. Para pocos puntos se calcula tramo a tramo en paralelo para maximizar precision por salto.
+7. Para rutas largas se agrupa por bloques para reducir latencia total sin perder detalle por tramo.
+8. En tramos peatonales directos (A -> B) se piden alternativas y se escoge la de menor distancia.
+9. El trazado permite volver por la misma calle si compensa (`continue_straight=false`).
+10. Se calculan tramos y pasos por calle (`computeLegSummaries` + `buildRouteSummary`).
+11. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle con ese nuevo orden.
 
 La heuristica busca un recorrido practico y rapido de calcular. No garantiza el TSP matematicamente optimo absoluto.
 
@@ -155,11 +155,12 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 - La autenticacion demo no es segura.
 - Depende de servicios publicos externos y de la conectividad online.
 - Nominatim, OSRM y GDELT pueden aplicar limites de uso, latencia o respuestas temporales inesperadas.
-- La optimizacion combina heuristica local y OSRM Trip, pero sigue siendo aproximada y no garantiza el optimo matematico absoluto.
+- La optimizacion usa heuristica local (nearest neighbor + 2-opt) con matriz de red peatonal; sigue siendo aproximada y no garantiza el optimo matematico absoluto.
 - Los sitios compartidos y apoyos son locales al navegador (sin backend multiusuario real en este MVP).
 - La geolocalizacion requiere permiso del navegador; si se deniega, la app usa busqueda general.
 - Las sugerencias por check de categoria en mapa solo muestran puntos dentro de 200 m desde la posicion geolocalizada.
 - Mapbox y Google requieren API keys en variables de entorno para funcionar.
+- El enrutado peatonal por defecto usa `routing.openstreetmap.de/routed-foot` (gratis, sin API key), con fallback configurable.
 - La pestaña de sugerencias resume noticias publicas y no sustituye a una agenda oficial de hermandades o cofradias.
 - Si los servicios externos fallan, la aplicacion muestra errores amigables, pero no puede completar la busqueda, la ruta o el resumen del dia.
 
@@ -175,6 +176,7 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 ## Notas de integracion
 
 - Los endpoints de Nominatim, OSRM y GDELT estan centralizados en `lib/constants.ts`.
+- Puedes sobreescribir los endpoints/perfiles de routing por variables `NEXT_PUBLIC_OSRM_*` en `.env.local`.
 - La ruta completa se segmenta si el numero de coordenadas crece demasiado para una sola llamada a OSRM.
 - La autenticacion es solo para demo y no debe reutilizarse en produccion.
 - El proyecto esta pensado para ejecutarse con `npm install` y `npm run dev` sin backend complejo ni base de datos.
