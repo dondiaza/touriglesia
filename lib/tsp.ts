@@ -1,5 +1,9 @@
 import type { MapPoint, MatrixResult, OrderedStop } from "./types";
 
+type TwoOptOptions = {
+  keepStart?: boolean;
+};
+
 export function nearestNeighborRoute(matrix: MatrixResult, startIndex = 0) {
   const size = matrix.durations.length;
 
@@ -44,11 +48,13 @@ export function nearestNeighborRoute(matrix: MatrixResult, startIndex = 0) {
   return order;
 }
 
-export function twoOptImprove(order: number[], matrix: MatrixResult) {
+export function twoOptImprove(order: number[], matrix: MatrixResult, options?: TwoOptOptions) {
   if (order.length < 4) {
     return order.slice();
   }
 
+  const keepStart = options?.keepStart ?? true;
+  const firstMutableIndex = keepStart ? 1 : 0;
   let bestOrder = order.slice();
   let bestCost = getOpenPathCost(bestOrder, matrix);
   let improved = true;
@@ -56,7 +62,7 @@ export function twoOptImprove(order: number[], matrix: MatrixResult) {
   while (improved) {
     improved = false;
 
-    for (let start = 1; start < bestOrder.length - 1; start += 1) {
+    for (let start = firstMutableIndex; start < bestOrder.length - 1; start += 1) {
       for (let end = start + 1; end < bestOrder.length; end += 1) {
         const candidate = swapSegment(bestOrder, start, end);
         const candidateCost = getOpenPathCost(candidate, matrix);
@@ -72,6 +78,31 @@ export function twoOptImprove(order: number[], matrix: MatrixResult) {
       if (improved) {
         break;
       }
+    }
+  }
+
+  return bestOrder;
+}
+
+export function selectBestOpenRoute(matrix: MatrixResult) {
+  const size = matrix.durations.length;
+
+  if (size === 0) {
+    return [];
+  }
+
+  let bestOrder: number[] = [];
+  let bestCost = Number.POSITIVE_INFINITY;
+
+  for (let startIndex = 0; startIndex < size; startIndex += 1) {
+    const seedOrder = nearestNeighborRoute(matrix, startIndex);
+    const improvedOrder = twoOptImprove(seedOrder, matrix, { keepStart: true });
+    const normalizedOrder = twoOptImprove(improvedOrder, matrix, { keepStart: false });
+    const candidateCost = getOpenPathCost(normalizedOrder, matrix);
+
+    if (candidateCost < bestCost) {
+      bestCost = candidateCost;
+      bestOrder = normalizedOrder;
     }
   }
 
@@ -100,7 +131,7 @@ export function buildOrderedStops(order: number[], points: MapPoint[], matrix: M
   });
 }
 
-function getOpenPathCost(order: number[], matrix: MatrixResult) {
+export function getOpenPathCost(order: number[], matrix: MatrixResult) {
   let total = 0;
 
   for (let index = 1; index < order.length; index += 1) {
