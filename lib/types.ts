@@ -81,6 +81,8 @@ export type RouteSummary = {
 export type RouteHistoryEntry = {
   id: string;
   label: string;
+  routeName?: string;
+  savedBy?: string;
   createdAt: string;
   travelMode: TravelMode;
   orderedStops: OrderedStop[];
