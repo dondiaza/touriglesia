@@ -1,7 +1,7 @@
 "use client";
 
 import mapboxgl from "mapbox-gl";
-import Map, { Marker, NavigationControl } from "react-map-gl/mapbox";
+import Map, { Marker, NavigationControl } from "react-map-gl";
 
 import {
   DEFAULT_MAP_CENTER,
