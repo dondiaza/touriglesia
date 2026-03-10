@@ -1,0 +1,27 @@
+import type { Metadata } from "next";
+import { Manrope, Space_Grotesk } from "next/font/google";
+import "leaflet/dist/leaflet.css";
+import "./globals.css";
+
+const sans = Manrope({
+  subsets: ["latin"],
+  variable: "--font-sans"
+});
+
+const display = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-display"
+});
+
+export const metadata: Metadata = {
+  title: "TourIglesia",
+  description: "Planificador web minimo para recorridos andando entre iglesias y otros puntos."
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html lang="es" className={`${sans.variable} ${display.variable}`}>
+      <body>{children}</body>
+    </html>
+  );
+}
