@@ -7,12 +7,14 @@ import type { PersistedTourState } from "@/lib/types";
 type PersistedStateBody = {
   key?: string;
   data?: PersistedTourState;
+  revision?: number;
 };
 
 type PersistedStateRow = {
   state_key: string;
-  data: PersistedTourState;
+  data?: PersistedTourState;
   updated_at: string;
+  client_revision: number | string;
 };
 
 const DEFAULT_STATE_KEY = "iglesia";
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
   try {
     await ensureStateTable(sql);
     const result = (await sql`
-      SELECT state_key, data, updated_at
+      SELECT state_key, data, updated_at, client_revision
       FROM touriglesia_state
       WHERE state_key = ${stateKey}
       LIMIT 1
@@ -51,6 +53,7 @@ export async function GET(request: NextRequest) {
       {
         key: stateKey,
         data: row?.data ?? null,
+        revision: normalizeRevision(row?.client_revision),
         updatedAt: row?.updated_at ?? null
       },
       {
@@ -117,24 +120,43 @@ export async function POST(request: NextRequest) {
   }
 
   const stateKey = normalizeStateKey(body.key);
+  const clientRevision = normalizeIncomingRevision(body.revision);
 
   try {
     await ensureStateTable(sql);
     const serializedState = JSON.stringify(body.data);
 
-    await sql`
-      INSERT INTO touriglesia_state (state_key, data, updated_at)
-      VALUES (${stateKey}, ${serializedState}::jsonb, NOW())
+    const upserted = (await sql`
+      INSERT INTO touriglesia_state (state_key, data, client_revision, updated_at)
+      VALUES (${stateKey}, ${serializedState}::jsonb, ${clientRevision}, NOW())
       ON CONFLICT (state_key)
       DO UPDATE SET
         data = EXCLUDED.data,
+        client_revision = EXCLUDED.client_revision,
         updated_at = NOW()
-    `;
+      WHERE EXCLUDED.client_revision >= touriglesia_state.client_revision
+      RETURNING state_key, updated_at, client_revision
+    `) as PersistedStateRow[];
+
+    const applied = upserted.length > 0;
+    const resultRow =
+      upserted[0] ||
+      (
+        (await sql`
+          SELECT state_key, updated_at, client_revision
+          FROM touriglesia_state
+          WHERE state_key = ${stateKey}
+          LIMIT 1
+        `) as PersistedStateRow[]
+      )[0];
 
     return NextResponse.json(
       {
         key: stateKey,
-        saved: true
+        saved: true,
+        applied,
+        revision: normalizeRevision(resultRow?.client_revision),
+        updatedAt: resultRow?.updated_at ?? null
       },
       {
         headers: {
@@ -156,6 +178,46 @@ export async function POST(request: NextRequest) {
       }
     );
   }
+}
+
+function normalizeRevision(value: number | string | undefined | null) {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return 0;
+}
+
+function normalizeIncomingRevision(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+
+  return Math.trunc(value);
+}
+
+async function ensureStateTable(sql: any) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS touriglesia_state (
+      state_key TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      client_revision BIGINT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`
+    ALTER TABLE touriglesia_state
+    ADD COLUMN IF NOT EXISTS client_revision BIGINT NOT NULL DEFAULT 0
+  `;
 }
 
 function normalizeStateKey(value: string | null | undefined) {
@@ -186,14 +248,4 @@ function getNeonClient() {
   }
 
   return neon(databaseUrl);
-}
-
-async function ensureStateTable(sql: any) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS touriglesia_state (
-      state_key TEXT PRIMARY KEY,
-      data JSONB NOT NULL,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `;
 }
