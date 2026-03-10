@@ -1,5 +1,6 @@
 export type PointSource = "search" | "map" | "demo";
 export type TravelMode = "walking" | "driving";
+export type SuggestedPlaceCategory = "iglesia" | "cofrade" | "cerveceria";
 
 export type LatLngTuple = [number, number];
 
@@ -108,4 +109,14 @@ export type DailyNewsDigest = {
   summary: string[];
   articles: NewsArticle[];
   sourceLabel: string;
+};
+
+export type SuggestedPlace = {
+  id: string;
+  name: string;
+  category: SuggestedPlaceCategory;
+  lat: number;
+  lon: number;
+  address?: string;
+  description?: string;
 };
