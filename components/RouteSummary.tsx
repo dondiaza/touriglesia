@@ -133,7 +133,7 @@ export default function RouteSummary({
                           <li className="text-sm text-slate-700" key={`${leg.fromPointId}-${leg.toPointId}-step-${stepIndex}`}>
                             <p>{step.instruction}</p>
                             <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
-                              {formatDistance(step.distanceMeters)} · {formatDuration(step.durationSeconds)}
+                              {formatDistance(step.distanceMeters)} | {formatDuration(step.durationSeconds)}
                             </p>
                           </li>
                         ))}
