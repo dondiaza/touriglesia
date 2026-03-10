@@ -12,7 +12,8 @@ Aplicacion web para crear rutas entre iglesias, parroquias, hermandades y otros 
 - Google Maps JS API (@vis.gl/react-google-maps)
 - MapLibre GL
 - OpenLayers
-- Zustand con persistencia local
+- Zustand con persistencia local y sincronizacion remota opcional (Vercel Postgres/Neon)
+- @vercel/postgres para persistencia serverless
 - OpenStreetMap tiles
 - Nominatim para geocodificacion y busqueda
 - OSRM publico para matriz y rutas peatonales
@@ -51,6 +52,7 @@ Importante: esta autenticacion es solo para demo. Las credenciales estan hardcod
 app/
   api/
     cofradia-news/route.ts
+    state/route.ts
   layout.tsx
   page.tsx
   login/page.tsx
@@ -72,6 +74,7 @@ lib/
   news.ts
   planner.ts
   route.ts
+  statePersistence.ts
   tsp.ts
   types.ts
   utils.ts
@@ -92,7 +95,9 @@ app/
 ## Funcionalidades incluidas
 
 - Login demo con una unica pantalla protegida
+- Login sin mostrar credenciales en pantalla ni placeholders precompletados
 - Busqueda con autocompletar simple y prioridad para resultados cofrades y eclesiasticos
+- Foco por defecto en Sevilla cuando no hay geolocalizacion disponible
 - Sincronizacion inicial con geolocalizacion del navegador para priorizar resultados de la zona actual
 - Geolocalizacion en vivo con actualizacion continua y marcador de posicion sobre el mapa
 - Sesgo local en Nominatim (viewbox + pais + limite de area) para evitar resultados de otros paises cuando no toca
@@ -107,7 +112,7 @@ app/
 - Modo de ruta fijo: andando
 - Generacion de ruta eficiente con matriz OSRM + nearest neighbor + 2-opt
 - En modo a pie, la optimizacion prioriza distancia total (tramo mas corto posible entre puntos)
-- Reordenacion manual por drag and drop (desktop + mobile)
+- Reordenacion manual por arrastrar y soltar (desktop + mobile)
 - Al regenerar tras reordenar manualmente, se respeta exactamente el orden establecido
 - Rutas guardadas en una pestana dedicada, con guardado manual por nombre de ruta y usuario
 - Sugerencias clave sobre el mapa (iglesias, interes cofrade y cervecerias) con seleccion y anadido a ruta
@@ -135,16 +140,16 @@ app/
 8. En tramos peatonales directos (A -> B) se piden alternativas y se escoge la de menor distancia.
 9. El trazado permite volver por la misma calle si compensa (`continue_straight=false`).
 10. Se calculan tramos y pasos por calle (`computeLegSummaries` + `buildRouteSummary`).
-11. Si el usuario reordena manualmente por drag and drop, al pulsar "Generar recorrido" se recalcula respetando ese orden.
+11. Si el usuario reordena manualmente por arrastrar y soltar, al pulsar "Generar recorrido" se recalcula respetando ese orden.
 
 La heuristica busca un recorrido practico y rapido de calcular. No garantiza el TSP matematicamente optimo absoluto.
 
 ## Rutas guardadas y persistencia
 
-- Las rutas guardadas se almacenan en `localStorage` usando Zustand persist.
-- El guardado es manual: tras generar una ruta, pulsa "Guardar ruta" e indica nombre de ruta y usuario.
-- Tambien se persisten en local `userLocation` (ultima zona sincronizada) y `communityPlaces`.
-- La ruta actual no se persiste completa como sesion de trabajo; las rutas guardadas sirven como recuperacion rapida.
+- Toda la sesion de trabajo (puntos, orden, resumen de ruta, rutas guardadas, comunidad y ubicacion) se persiste en `localStorage`.
+- Si configuras `POSTGRES_URL` o `DATABASE_URL`, el estado completo tambien se sincroniza en `app/api/state` sobre Vercel Postgres (Neon).
+- El guardado de rutas sigue siendo manual: tras generar una ruta, pulsa "Guardar ruta" e indica nombre de ruta y usuario.
+- Si la base de datos no esta configurada o falla, la aplicacion mantiene persistencia local y muestra un aviso amigable.
 
 ## Sugerencias diarias
 
@@ -158,7 +163,7 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 - Depende de servicios publicos externos y de la conectividad online.
 - Nominatim, OSRM y GDELT pueden aplicar limites de uso, latencia o respuestas temporales inesperadas.
 - La optimizacion usa heuristica local (nearest neighbor + 2-opt) con matriz de red peatonal; sigue siendo aproximada y no garantiza el optimo matematico absoluto.
-- Los sitios compartidos y apoyos son locales al navegador (sin backend multiusuario real en este MVP).
+- Los sitios compartidos y apoyos no tienen moderacion ni control de identidad; en modo sin Postgres quedan locales al navegador.
 - La geolocalizacion requiere permiso del navegador; si se deniega, la app usa busqueda general.
 - Las sugerencias por check de categoria en mapa solo muestran puntos dentro de 200 m desde la posicion geolocalizada.
 - Mapbox y Google requieren API keys en variables de entorno para funcionar.
@@ -168,7 +173,7 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 
 ## Mejoras futuras
 
-- Reordenacion drag and drop
+- Reordenacion por arrastrar y soltar con feedback visual avanzado
 - Seleccion explicita del punto inicial y final
 - Exportacion GPX o PDF
 - Cache propia para Nominatim y OSRM
@@ -179,7 +184,8 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 
 - Los endpoints de Nominatim, OSRM y GDELT estan centralizados en `lib/constants.ts`.
 - Puedes sobreescribir los endpoints/perfiles de routing por variables `NEXT_PUBLIC_OSRM_*` en `.env.local`.
+- Para persistencia remota define `POSTGRES_URL` o `DATABASE_URL` (en Vercel se inyecta automaticamente al conectar Postgres).
 - La ruta completa se segmenta si el numero de coordenadas crece demasiado para una sola llamada a OSRM.
 - La autenticacion es solo para demo y no debe reutilizarse en produccion.
-- El proyecto esta pensado para ejecutarse con `npm install` y `npm run dev` sin backend complejo ni base de datos.
+- El proyecto esta pensado para ejecutarse con `npm install` y `npm run dev` sin backend complejo; la base de datos es opcional para persistencia remota.
 - Consulta `MAPS_SETUP.md` para comparar motores de mapas y configurar claves.
