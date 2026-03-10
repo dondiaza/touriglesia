@@ -83,12 +83,15 @@ store/
 - Alta de puntos desde resultados de busqueda
 - Alta de puntos tocando o haciendo click en el mapa en desktop y mobile, con confirmacion previa para evitar misclick
 - Reverse geocoding para nombrar mejor los puntos anadidos desde el mapa
+- Correccion de posicion al anadir por mapa: se conserva exactamente la coordenada tocada
 - Edicion de nombre, centrado y eliminacion de puntos
 - Limite de 25 puntos
 - Selector de modo de viaje: a pie por defecto o coche
 - Generacion de ruta eficiente con matriz OSRM + nearest neighbor + 2-opt
 - Reordenacion manual de la ruta generada con recalculo inmediato
 - Historico local de rutas creadas y reajustadas en una pestana dedicada
+- Sugerencias clave sobre el mapa (iglesias, interes cofrade y cervecerias) con seleccion y anadido a ruta
+- Eliminacion de puntos directamente desde la ficha del marcador en el mapa
 - Marcadores renumerados segun el orden final
 - Preview flotante al pulsar un marcador del mapa
 - Polilinea del recorrido
@@ -101,9 +104,11 @@ store/
 1. Se construye una matriz de tiempos y distancias con OSRM Table Service (`buildTravelMatrix`).
 2. Se genera y evalua un orden inicial desde multiples puntos de arranque con nearest neighbor.
 3. Se mejora localmente con 2-opt y se selecciona el mejor coste total (`selectBestOpenRoute`).
-4. Se solicita la geometria real a OSRM Route Service (`fetchFullRoute`).
-5. Se calculan los tramos y pasos de navegacion por calle (`computeLegSummaries` + `buildRouteSummary`).
-6. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle manteniendo ese nuevo orden.
+4. Se consulta OSRM Trip Service y se compara contra la heuristica local para elegir el orden mas corto disponible.
+5. Se solicita la geometria real a OSRM Route Service (`fetchFullRoute`).
+6. El trazado por tramo permite volver por la misma calle si compensa (`continue_straight=false`).
+7. Se calculan los tramos y pasos de navegacion por calle (`computeLegSummaries` + `buildRouteSummary`).
+8. Si el usuario mueve una parada manualmente, la app recalcula la geometria y el detalle manteniendo ese nuevo orden.
 
 La heuristica busca un recorrido practico y rapido de calcular. No garantiza el TSP matematicamente optimo absoluto.
 
@@ -124,7 +129,7 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 - La autenticacion demo no es segura.
 - Depende de servicios publicos externos y de la conectividad online.
 - Nominatim, OSRM y GDELT pueden aplicar limites de uso, latencia o respuestas temporales inesperadas.
-- La optimizacion es heuristica: nearest neighbor + 2-opt. Es muy util para MVP, pero no garantiza el optimo matematico.
+- La optimizacion combina heuristica local y OSRM Trip, pero sigue siendo aproximada y no garantiza el optimo matematico absoluto.
 - La pestaña de sugerencias resume noticias publicas y no sustituye a una agenda oficial de hermandades o cofradias.
 - Si los servicios externos fallan, la aplicacion muestra errores amigables, pero no puede completar la busqueda, la ruta o el resumen del dia.
 
