@@ -30,7 +30,7 @@ export default function MapViewClient({
   onMapClick
 }: MapViewClientProps) {
   return (
-    <div className="h-[50vh] min-h-[420px] overflow-hidden rounded-[28px] border border-[var(--panel-border)] shadow-[var(--shadow)] lg:h-[calc(100vh-8rem)]">
+    <div className="h-[50vh] min-h-[420px] overflow-hidden rounded-3xl border border-[var(--panel-border)] shadow-[var(--shadow)] lg:h-[calc(100vh-8rem)]">
       <MapContainer center={SEVILLE_CENTER} className="h-full w-full" zoom={DEFAULT_MAP_ZOOM}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
