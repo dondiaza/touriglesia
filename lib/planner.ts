@@ -28,14 +28,15 @@ type PlannerResult = {
   pointsSnapshot: MapPoint[];
 };
 
-export async function generateOptimizedRoute(points: MapPoint[], travelMode: TravelMode): Promise<PlannerResult> {
-  const matrix = await buildTravelMatrix(points, travelMode);
-  const optimizationMetric: OptimizationMetric = travelMode === "walking" ? "distance" : "duration";
+export async function generateOptimizedRoute(points: MapPoint[], _travelMode: TravelMode): Promise<PlannerResult> {
+  const effectiveTravelMode: TravelMode = "walking";
+  const matrix = await buildTravelMatrix(points, effectiveTravelMode);
+  const optimizationMetric: OptimizationMetric = "distance";
   const candidateOrders: number[][] = [];
   const heuristicOrder = selectBestOpenRoute(matrix, optimizationMetric);
   candidateOrders.push(heuristicOrder);
 
-  const tripOrder = await fetchTripOptimizedOrder(points, travelMode);
+  const tripOrder = await fetchTripOptimizedOrder(points, effectiveTravelMode);
 
   if (tripOrder && tripOrder.length === points.length) {
     candidateOrders.push(
@@ -54,7 +55,7 @@ export async function generateOptimizedRoute(points: MapPoint[], travelMode: Tra
       : bestOrder;
   }, heuristicOrder);
   const orderedPoints = improvedOrder.map((index) => points[index]);
-  const routeResult = await fetchFullRoute(orderedPoints, travelMode);
+  const routeResult = await fetchFullRoute(orderedPoints, effectiveTravelMode);
   const pointIndexLookup = buildPointIndexLookup(points);
   const legs = computeLegSummaries(orderedPoints, routeResult.legs, matrix, pointIndexLookup);
   const orderedStops = buildOrderedStops(improvedOrder, points, matrix).map((stop, index) => {
@@ -71,7 +72,7 @@ export async function generateOptimizedRoute(points: MapPoint[], travelMode: Tra
     };
   });
 
-  const routeSummary = buildRouteSummary(orderedPoints, routeResult.geometry, legs, travelMode);
+  const routeSummary = buildRouteSummary(orderedPoints, routeResult.geometry, legs, effectiveTravelMode);
 
   return {
     routeSummary,
@@ -83,16 +84,17 @@ export async function generateOptimizedRoute(points: MapPoint[], travelMode: Tra
 export async function rebuildRouteFromManualOrder(
   points: MapPoint[],
   pointOrder: string[],
-  travelMode: TravelMode
+  _travelMode: TravelMode
 ): Promise<PlannerResult> {
+  const effectiveTravelMode: TravelMode = "walking";
   const orderedPoints = pointOrder
     .map((pointId) => points.find((point) => point.id === pointId))
     .filter(Boolean) as MapPoint[];
 
-  const routeResult = await fetchFullRoute(orderedPoints, travelMode);
+  const routeResult = await fetchFullRoute(orderedPoints, effectiveTravelMode);
   const legs = computeLegSummaries(orderedPoints, routeResult.legs);
   const orderedStops = buildOrderedStopsFromLegs(orderedPoints, legs);
-  const routeSummary = buildRouteSummary(orderedPoints, routeResult.geometry, legs, travelMode);
+  const routeSummary = buildRouteSummary(orderedPoints, routeResult.geometry, legs, effectiveTravelMode);
 
   return {
     routeSummary,
