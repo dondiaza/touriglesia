@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import CommunityPanel from "@/components/CommunityPanel";
 import HistoryPanel from "@/components/HistoryPanel";
 import MapView from "@/components/MapView";
 import PointsList from "@/components/PointsList";
@@ -11,7 +12,12 @@ import SearchBox from "@/components/SearchBox";
 import SuggestionsPanel from "@/components/SuggestionsPanel";
 import { clearAuthCookie } from "@/lib/auth";
 import { MAX_POINTS } from "@/lib/constants";
-import { buildMapPointDraftFromReverse, reverseGeocode, searchResultToPointDraft } from "@/lib/geo";
+import {
+  buildMapPointDraftFromReverse,
+  fetchNearbyInterest,
+  reverseGeocode,
+  searchResultToPointDraft
+} from "@/lib/geo";
 import { KEY_SITE_SUGGESTIONS, SUGGESTED_CATEGORY_LABELS } from "@/lib/keySites";
 import {
   buildRouteHistoryEntry,
@@ -19,7 +25,7 @@ import {
   moveRouteStop,
   rebuildRouteFromManualOrder
 } from "@/lib/planner";
-import type { SearchResult, SuggestedPlace, TravelMode } from "@/lib/types";
+import type { SearchBias, SearchResult, SuggestedPlace, TravelMode } from "@/lib/types";
 import { cn, formatDistance, formatDuration, formatTravelMode } from "@/lib/utils";
 import { useTourStore } from "@/store/useTourStore";
 
@@ -34,6 +40,9 @@ export default function TourPlanner() {
   const routeSummary = useTourStore((state) => state.routeSummary);
   const routeHistory = useTourStore((state) => state.routeHistory);
   const travelMode = useTourStore((state) => state.travelMode);
+  const userLocation = useTourStore((state) => state.userLocation);
+  const communityPlaces = useTourStore((state) => state.communityPlaces);
+  const activeStopIndex = useTourStore((state) => state.activeStopIndex);
   const mapFocus = useTourStore((state) => state.mapFocus);
   const notice = useTourStore((state) => state.notice);
   const addPoint = useTourStore((state) => state.addPoint);
@@ -46,6 +55,10 @@ export default function TourPlanner() {
   const applyRoute = useTourStore((state) => state.applyRoute);
   const setNotice = useTourStore((state) => state.setNotice);
   const setTravelMode = useTourStore((state) => state.setTravelMode);
+  const setUserLocation = useTourStore((state) => state.setUserLocation);
+  const setActiveStopIndex = useTourStore((state) => state.setActiveStopIndex);
+  const shareCommunityPlace = useTourStore((state) => state.shareCommunityPlace);
+  const supportCommunityPlace = useTourStore((state) => state.supportCommunityPlace);
   const saveRouteToHistory = useTourStore((state) => state.saveRouteToHistory);
   const restoreRouteFromHistory = useTourStore((state) => state.restoreRouteFromHistory);
   const removeHistoryEntry = useTourStore((state) => state.removeHistoryEntry);
@@ -53,9 +66,62 @@ export default function TourPlanner() {
   const [activeTab, setActiveTab] = useState<SideTab>("planner");
   const [activeSuggestionCategory, setActiveSuggestionCategory] = useState<SuggestedPlace["category"] | "all">("all");
   const [visibleSuggestionIds, setVisibleSuggestionIds] = useState<string[]>([]);
+  const [nearbyInterests, setNearbyInterests] = useState<SearchResult[]>([]);
+  const [isLoadingNearbyInterests, setIsLoadingNearbyInterests] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isResolvingClick, setIsResolvingClick] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasSyncedLocation, setHasSyncedLocation] = useState(false);
+
+  useEffect(() => {
+    if (hasSyncedLocation || typeof navigator === "undefined" || !navigator.geolocation) {
+      return;
+    }
+
+    setHasSyncedLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        let areaLabel: string | undefined;
+        let countryCode: string | undefined;
+
+        try {
+          const reverseResult = await reverseGeocode(lat, lon);
+          areaLabel =
+            reverseResult?.metadata?.cityLabel ||
+            reverseResult?.displayName?.split(",")[0];
+          countryCode = reverseResult?.metadata?.countryCode;
+        } catch {
+          areaLabel = undefined;
+          countryCode = undefined;
+        }
+
+        setUserLocation({
+          lat,
+          lon,
+          areaLabel,
+          countryCode,
+          syncedAt: new Date().toISOString()
+        });
+      },
+      () => {
+        setNotice("No se pudo sincronizar la ubicacion. Se usara busqueda general.");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 1000 * 60 * 15
+      }
+    );
+  }, [hasSyncedLocation, setNotice, setUserLocation]);
+
+  useEffect(() => {
+    if (!routeSummary) {
+      setNearbyInterests([]);
+    }
+  }, [routeSummary]);
 
   async function handleAddSearchResult(result: SearchResult) {
     setError(null);
@@ -154,6 +220,61 @@ export default function TourPlanner() {
     }
   }
 
+  async function handleMarkArrived() {
+    if (!routeSummary) {
+      return;
+    }
+
+    const nextIndex = Math.min(activeStopIndex + 1, routeSummary.pointOrder.length - 1);
+
+    if (nextIndex === activeStopIndex) {
+      return;
+    }
+
+    setActiveStopIndex(nextIndex);
+    const destinationPointId = routeSummary.pointOrder[nextIndex];
+    const destinationPoint = points.find((point) => point.id === destinationPointId);
+
+    if (!destinationPoint) {
+      return;
+    }
+
+    setIsLoadingNearbyInterests(true);
+
+    try {
+      const nearbyResults = await fetchNearbyInterest(destinationPoint.lat, destinationPoint.lon, 6);
+      const filtered = nearbyResults.filter(
+        (result) =>
+          !points.some(
+            (point) =>
+              Math.abs(point.lat - result.lat) < 0.00005 &&
+              Math.abs(point.lon - result.lon) < 0.00005
+          )
+      );
+      setNearbyInterests(filtered);
+      setNotice("Llegada registrada. Tienes nuevas sugerencias cercanas.");
+    } catch (nearbyError) {
+      setError(
+        nearbyError instanceof Error
+          ? nearbyError.message
+          : "No se pudieron cargar sugerencias cercanas."
+      );
+    } finally {
+      setIsLoadingNearbyInterests(false);
+    }
+  }
+
+  async function handleAddNearbyInterest(result: SearchResult) {
+    const outcome = addPoint(searchResultToPointDraft(result, "search"));
+
+    if (!outcome.ok) {
+      setError(outcome.error || "No se pudo anadir el sitio cercano.");
+      return;
+    }
+
+    setNearbyInterests((current) => current.filter((item) => item.id !== result.id));
+  }
+
   function handleTravelModeChange(nextMode: TravelMode) {
     if (nextMode === travelMode) {
       return;
@@ -197,19 +318,30 @@ export default function TourPlanner() {
     clearAll();
   }
 
-  function handleToggleSuggestionVisibility(suggestion: SuggestedPlace) {
+  function handleToggleSuggestionVisibility(suggestionId: string) {
     setVisibleSuggestionIds((current) => {
-      if (current.includes(suggestion.id)) {
-        return current.filter((id) => id !== suggestion.id);
+      if (current.includes(suggestionId)) {
+        return current.filter((id) => id !== suggestionId);
       }
 
-      return [...current, suggestion.id];
+      return [...current, suggestionId];
     });
   }
 
   async function handleAddSuggestedPlaceToRoute(suggestion: SuggestedPlace) {
     if (points.length >= MAX_POINTS) {
       setError(`Has alcanzado el maximo de ${MAX_POINTS} puntos.`);
+      return;
+    }
+
+    const alreadyAdded = points.some(
+      (point) =>
+        Math.abs(point.lat - suggestion.lat) < 0.00005 &&
+        Math.abs(point.lon - suggestion.lon) < 0.00005
+    );
+
+    if (alreadyAdded) {
+      setNotice("Ese sitio ya esta incluido en la ruta.");
       return;
     }
 
@@ -230,7 +362,40 @@ export default function TourPlanner() {
     }
   }
 
-  const filteredSuggestions = KEY_SITE_SUGGESTIONS.filter((site) => {
+  function handleSharePoint(pointId: string) {
+    const targetPoint = points.find((point) => point.id === pointId);
+
+    if (!targetPoint) {
+      return;
+    }
+
+    shareCommunityPlace({
+      name: targetPoint.name,
+      lat: targetPoint.lat,
+      lon: targetPoint.lon,
+      address: targetPoint.address,
+      description: targetPoint.displayName,
+      category: "cofrade"
+    });
+  }
+
+  const communitySuggestions: SuggestedPlace[] = communityPlaces.map((place) => ({
+    id: place.id,
+    name: place.name,
+    category: place.category,
+    lat: place.lat,
+    lon: place.lon,
+    address: place.address,
+    description: place.description,
+    votes: place.votes,
+    isCommunity: true
+  }));
+
+  const allSuggestions = [...KEY_SITE_SUGGESTIONS, ...communitySuggestions].sort(
+    (left, right) => (right.votes ?? 0) - (left.votes ?? 0)
+  );
+
+  const filteredSuggestions = allSuggestions.filter((site) => {
     if (activeSuggestionCategory === "all") {
       return true;
     }
@@ -238,14 +403,24 @@ export default function TourPlanner() {
     return site.category === activeSuggestionCategory;
   });
 
-  const visibleSuggestions = KEY_SITE_SUGGESTIONS.filter((site) => visibleSuggestionIds.includes(site.id));
+  const visibleSuggestions = allSuggestions.filter((site) => visibleSuggestionIds.includes(site.id));
 
   const isBusy = isGenerating || isResolvingClick;
   const canGenerate = points.length >= 2 && !isBusy;
   const routeGeometry = routeSummary?.geometry ?? [];
   const totals = routeSummary
-    ? `${formatTravelMode(routeSummary.travelMode)} · ${formatDistance(routeSummary.totalDistanceMeters)} · ${formatDuration(routeSummary.totalDurationSeconds)}`
+    ? `${formatTravelMode(routeSummary.travelMode)} | ${formatDistance(routeSummary.totalDistanceMeters)} | ${formatDuration(routeSummary.totalDurationSeconds)}`
     : "Sin ruta generada";
+
+  const searchBias: SearchBias | null = userLocation
+    ? {
+        lat: userLocation.lat,
+        lon: userLocation.lon,
+        radiusKm: 12,
+        bounded: true,
+        countryCode: userLocation.countryCode
+      }
+    : null;
 
   return (
     <main className="px-4 py-4 lg:px-6 lg:py-6">
@@ -260,8 +435,8 @@ export default function TourPlanner() {
                 Rutas cofrades y eclesiasticas
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-                Busca puntos, anadelos en el mapa con confirmacion y genera recorridos eficientes a
-                pie o en coche con guia por calles.
+                Busca puntos en tu zona, anadelos con confirmacion, marca llegadas y descubre
+                sitios cercanos y compartidos por la comunidad.
               </p>
             </div>
 
@@ -276,9 +451,11 @@ export default function TourPlanner() {
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-                  Estado
+                  Zona activa
                 </p>
-                <p className="mt-1 text-sm font-medium text-slate-900">{totals}</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">
+                  {userLocation?.areaLabel || "Sin sincronizar"}
+                </p>
               </div>
               <button
                 className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
@@ -337,8 +514,10 @@ export default function TourPlanner() {
             {activeTab === "planner" ? (
               <>
                 <SearchBox
+                  defaultAreaLabel={userLocation?.areaLabel}
                   disabled={points.length >= MAX_POINTS || isBusy}
                   onAddResult={handleAddSearchResult}
+                  searchBias={searchBias}
                 />
 
                 <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
@@ -348,8 +527,7 @@ export default function TourPlanner() {
                     </p>
                     <h2 className="text-xl font-semibold text-slate-900">Modo y controles</h2>
                     <p className="text-sm leading-6 text-[var(--muted)]">
-                      El modo por defecto es a pie. Si cambias a coche, la siguiente ruta se
-                      recalculara con ese perfil.
+                      Estado actual: {totals}
                     </p>
                   </div>
 
@@ -398,10 +576,8 @@ export default function TourPlanner() {
 
                   <div className="mt-4 space-y-2 text-sm text-[var(--muted)]">
                     <p>
-                      Al tocar/click en el mapa no se anade al instante: primero pide confirmacion
-                      para evitar misclick.
+                      Al tocar/click en el mapa no se anade al instante: primero pide confirmacion.
                     </p>
-                    <p>Al cambiar puntos o modo de viaje, la ruta anterior se invalida.</p>
                     {isResolvingClick ? <p>Resolviendo ubicacion del punto confirmado...</p> : null}
                   </div>
 
@@ -425,6 +601,7 @@ export default function TourPlanner() {
                   onMovePoint={handleMovePoint}
                   onRemovePoint={removePoint}
                   onRenamePoint={updatePointName}
+                  onSharePoint={handleSharePoint}
                   orderedPointIds={routeSummary?.pointOrder ?? []}
                   points={points}
                 />
@@ -452,8 +629,8 @@ export default function TourPlanner() {
                   Iglesias, interes cofrade y cervecerias
                 </h2>
                 <p className="text-sm leading-6 text-[var(--muted)]">
-                  Marca una sugerencia para pintarla en el mapa. Luego puedes seleccionarla y
-                  anadirla a la ruta desde su ficha.
+                  Marca una sugerencia para pintarla en el mapa. Puedes seleccionarla y anadirla a
+                  la ruta desde su ficha.
                 </p>
               </div>
 
@@ -494,7 +671,9 @@ export default function TourPlanner() {
                     <li className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2" key={suggestion.id}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="font-semibold text-slate-900">{suggestion.name}</p>
+                          <p className="font-semibold text-slate-900">
+                            {suggestion.name} {suggestion.votes ? `(${suggestion.votes})` : ""}
+                          </p>
                           <p className="mt-1 text-sm text-[var(--muted)]">{suggestion.address}</p>
                         </div>
                         <button
@@ -504,7 +683,7 @@ export default function TourPlanner() {
                               ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
                               : "border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
                           )}
-                          onClick={() => handleToggleSuggestionVisibility(suggestion)}
+                          onClick={() => handleToggleSuggestionVisibility(suggestion.id)}
                           type="button"
                         >
                           {isVisible ? "Ocultar" : "Mostrar"}
@@ -515,6 +694,13 @@ export default function TourPlanner() {
                 })}
               </ul>
             </section>
+
+            <CommunityPanel
+              onShowOnMap={handleToggleSuggestionVisibility}
+              onSupport={supportCommunityPlace}
+              places={communityPlaces}
+              visibleIds={visibleSuggestionIds}
+            />
 
             <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-3 shadow-[var(--shadow)]">
               <div className="mb-3 flex items-center justify-between px-1 pt-1">
@@ -538,7 +724,15 @@ export default function TourPlanner() {
               />
             </section>
 
-            <RouteSummary points={points} routeSummary={routeSummary} />
+            <RouteSummary
+              activeStopIndex={activeStopIndex}
+              isLoadingNearbyInterests={isLoadingNearbyInterests}
+              nearbyInterests={nearbyInterests}
+              onAddNearbyInterest={handleAddNearbyInterest}
+              onMarkArrived={handleMarkArrived}
+              points={points}
+              routeSummary={routeSummary}
+            />
           </section>
         </div>
       </div>
