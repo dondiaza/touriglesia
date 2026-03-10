@@ -52,6 +52,8 @@ Importante: esta autenticacion es solo para demo. Las credenciales estan hardcod
 app/
   api/
     cofradia-news/route.ts
+    geocode/search/route.ts
+    geocode/reverse/route.ts
     state/route.ts
   layout.tsx
   page.tsx
@@ -162,6 +164,7 @@ La heuristica busca un recorrido practico y rapido de calcular. No garantiza el 
 - La autenticacion demo no es segura.
 - Depende de servicios publicos externos y de la conectividad online.
 - Nominatim, OSRM y GDELT pueden aplicar limites de uso, latencia o respuestas temporales inesperadas.
+- La busqueda usa proxy interno para Nominatim (`/api/geocode/*`) para reducir fallos de CORS en cliente.
 - La optimizacion usa heuristica local (nearest neighbor + 2-opt) con matriz de red peatonal; sigue siendo aproximada y no garantiza el optimo matematico absoluto.
 - Los sitios compartidos y apoyos no tienen moderacion ni control de identidad; en modo sin Postgres quedan locales al navegador.
 - La geolocalizacion requiere permiso del navegador; si se deniega, la app usa busqueda general.
