@@ -1,6 +1,5 @@
 "use client";
 
-import mapboxgl from "mapbox-gl";
 import Map, { Marker, NavigationControl } from "react-map-gl";
 
 import {
@@ -40,7 +39,6 @@ export default function MapboxMap({
           longitude: center.lng,
           zoom
         }}
-        mapLib={mapboxgl}
         mapStyle="mapbox://styles/mapbox/streets-v12"
         mapboxAccessToken={mapboxToken}
         style={{ width: "100%", height: "100%", borderRadius: "1rem" }}
