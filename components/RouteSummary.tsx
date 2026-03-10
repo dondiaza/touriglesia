@@ -74,7 +74,7 @@ export default function RouteSummary({ points, routeSummary }: RouteSummaryProps
                           {leg.fromIndex + 1} -&gt; {leg.toIndex + 1}
                         </p>
                         <p className="mt-1 text-sm text-[var(--muted)]">
-                          {fromPoint?.name || `Punto ${leg.fromIndex + 1}`} ->{" "}
+                          {fromPoint?.name || `Punto ${leg.fromIndex + 1}`} {"->"}{" "}
                           {toPoint?.name || `Punto ${leg.toIndex + 1}`}
                         </p>
                       </div>
