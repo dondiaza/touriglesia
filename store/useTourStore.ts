@@ -61,6 +61,7 @@ type TourState = {
   setUserLocation: (location: UserLocation) => void;
   setActiveStopIndex: (index: number) => void;
   addPoint: (point: PointDraft) => AddPointResult;
+  movePoint: (id: string, lat: number, lon: number) => void;
   updatePointName: (id: string, name: string) => void;
   removePoint: (id: string) => void;
   clearAll: () => void;
@@ -165,6 +166,27 @@ export const useTourStore = create<TourState>()(
         return {
           ok: true
         };
+      },
+
+      movePoint(id, lat, lon) {
+        set((state) => ({
+          points: state.points.map((point) =>
+            point.id === id
+              ? {
+                  ...stripRouteMetadata(point),
+                  lat,
+                  lon,
+                  address: `Ubicacion aproximada (${lat.toFixed(5)}, ${lon.toFixed(5)})`,
+                  displayName: `Ubicacion ajustada (${lat.toFixed(5)}, ${lon.toFixed(5)})`
+                }
+              : stripRouteMetadata(point)
+          ),
+          orderedStops: [],
+          routeSummary: null,
+          activeStopIndex: 0,
+          mapFocus: buildFocusTarget(lat, lon),
+          notice: "Punto movido en mapa. Pulsa Generar recorrido para recalcular."
+        }));
       },
 
       updatePointName(id, name) {
