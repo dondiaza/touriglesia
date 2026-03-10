@@ -26,12 +26,13 @@ import {
   rebuildRouteFromManualOrder
 } from "@/lib/planner";
 import type { SearchBias, SearchResult, SuggestedPlace, TravelMode } from "@/lib/types";
-import { cn, formatDistance, formatDuration, formatTravelMode } from "@/lib/utils";
+import { cn, formatDistance, formatDuration, formatTravelMode, haversineMeters } from "@/lib/utils";
 import { useTourStore } from "@/store/useTourStore";
 
 type SideTab = "planner" | "history" | "suggestions";
 
 const TRAVEL_MODE_OPTIONS: TravelMode[] = ["walking", "driving"];
+const SUGGESTION_RADIUS_METERS = 200;
 
 export default function TourPlanner() {
   const router = useRouter();
@@ -64,8 +65,13 @@ export default function TourPlanner() {
   const removeHistoryEntry = useTourStore((state) => state.removeHistoryEntry);
 
   const [activeTab, setActiveTab] = useState<SideTab>("planner");
-  const [activeSuggestionCategory, setActiveSuggestionCategory] = useState<SuggestedPlace["category"] | "all">("all");
-  const [visibleSuggestionIds, setVisibleSuggestionIds] = useState<string[]>([]);
+  const [enabledSuggestionCategories, setEnabledSuggestionCategories] = useState<
+    Record<SuggestedPlace["category"], boolean>
+  >({
+    iglesia: false,
+    cofrade: false,
+    cerveceria: false
+  });
   const [nearbyInterests, setNearbyInterests] = useState<SearchResult[]>([]);
   const [isLoadingNearbyInterests, setIsLoadingNearbyInterests] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -318,14 +324,11 @@ export default function TourPlanner() {
     clearAll();
   }
 
-  function handleToggleSuggestionVisibility(suggestionId: string) {
-    setVisibleSuggestionIds((current) => {
-      if (current.includes(suggestionId)) {
-        return current.filter((id) => id !== suggestionId);
-      }
-
-      return [...current, suggestionId];
-    });
+  function handleToggleSuggestionCategory(category: SuggestedPlace["category"]) {
+    setEnabledSuggestionCategories((current) => ({
+      ...current,
+      [category]: !current[category]
+    }));
   }
 
   async function handleAddSuggestedPlaceToRoute(suggestion: SuggestedPlace) {
@@ -395,15 +398,27 @@ export default function TourPlanner() {
     (left, right) => (right.votes ?? 0) - (left.votes ?? 0)
   );
 
-  const filteredSuggestions = allSuggestions.filter((site) => {
-    if (activeSuggestionCategory === "all") {
-      return true;
-    }
-
-    return site.category === activeSuggestionCategory;
-  });
-
-  const visibleSuggestions = allSuggestions.filter((site) => visibleSuggestionIds.includes(site.id));
+  const nearbySuggestions = userLocation
+    ? allSuggestions.filter(
+        (site) =>
+          haversineMeters(userLocation.lat, userLocation.lon, site.lat, site.lon) <=
+          SUGGESTION_RADIUS_METERS
+      )
+    : [];
+  const visibleSuggestions = nearbySuggestions.filter(
+    (site) => enabledSuggestionCategories[site.category]
+  );
+  const suggestionCounts = nearbySuggestions.reduce(
+    (accumulator, site) => {
+      accumulator[site.category] += 1;
+      return accumulator;
+    },
+    {
+      iglesia: 0,
+      cofrade: 0,
+      cerveceria: 0
+    } as Record<SuggestedPlace["category"], number>
+  );
 
   const isBusy = isGenerating || isResolvingClick;
   const canGenerate = points.length >= 2 && !isBusy;
@@ -629,78 +644,73 @@ export default function TourPlanner() {
                   Iglesias, interes cofrade y cervecerias
                 </h2>
                 <p className="text-sm leading-6 text-[var(--muted)]">
-                  Marca una sugerencia para pintarla en el mapa. Puedes seleccionarla y anadirla a
-                  la ruta desde su ficha.
+                  Activa checks por categoria para mostrar en el mapa todos los puntos cercanos
+                  (200 m a la redonda) de tu zona geolocalizada.
                 </p>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  className={cn(
-                    "rounded-full border px-3 py-2 text-sm font-semibold transition",
-                    activeSuggestionCategory === "all"
-                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
-                  )}
-                  onClick={() => setActiveSuggestionCategory("all")}
-                  type="button"
-                >
-                  Todas
-                </button>
-                {(Object.keys(SUGGESTED_CATEGORY_LABELS) as SuggestedPlace["category"][]).map((category) => (
-                  <button
-                    className={cn(
-                      "rounded-full border px-3 py-2 text-sm font-semibold transition",
-                      activeSuggestionCategory === category
-                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
-                    )}
-                    key={category}
-                    onClick={() => setActiveSuggestionCategory(category)}
-                    type="button"
-                  >
-                    {SUGGESTED_CATEGORY_LABELS[category]}
-                  </button>
-                ))}
-              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {(Object.keys(SUGGESTED_CATEGORY_LABELS) as SuggestedPlace["category"][]).map((category) => {
+                  const isEnabled = enabledSuggestionCategories[category];
+                  const categoryCount = suggestionCounts[category];
 
-              <ul className="tour-scrollbar mt-3 max-h-44 space-y-2 overflow-y-auto pr-1">
-                {filteredSuggestions.map((suggestion) => {
-                  const isVisible = visibleSuggestionIds.includes(suggestion.id);
                   return (
-                    <li className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2" key={suggestion.id}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-900">
-                            {suggestion.name} {suggestion.votes ? `(${suggestion.votes})` : ""}
-                          </p>
-                          <p className="mt-1 text-sm text-[var(--muted)]">{suggestion.address}</p>
-                        </div>
-                        <button
-                          className={cn(
-                            "shrink-0 rounded-xl border px-3 py-2 text-sm font-semibold transition",
-                            isVisible
-                              ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
-                          )}
-                          onClick={() => handleToggleSuggestionVisibility(suggestion.id)}
-                          type="button"
-                        >
-                          {isVisible ? "Ocultar" : "Mostrar"}
-                        </button>
-                      </div>
-                    </li>
+                    <button
+                      className={cn(
+                        "rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition",
+                        isEnabled
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                      )}
+                      key={category}
+                      onClick={() => handleToggleSuggestionCategory(category)}
+                      type="button"
+                    >
+                      <span className="block">{SUGGESTED_CATEGORY_LABELS[category]}</span>
+                      <span className="mt-1 block text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+                        {categoryCount} en 200m
+                      </span>
+                    </button>
                   );
                 })}
-              </ul>
+              </div>
+
+              {!userLocation ? (
+                <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  Activa geolocalizacion para cargar puntos cercanos en un radio de 200 metros.
+                </p>
+              ) : null}
+
+              {userLocation && nearbySuggestions.length === 0 ? (
+                <p className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white/70 px-3 py-2 text-sm text-[var(--muted)]">
+                  No hay sugerencias de estas categorias en 200 metros a la redonda.
+                </p>
+              ) : null}
+
+              {nearbySuggestions.length > 0 ? (
+                <ul className="tour-scrollbar mt-3 max-h-44 space-y-2 overflow-y-auto pr-1">
+                  {nearbySuggestions.map((suggestion) => {
+                    const meters = userLocation
+                      ? Math.round(haversineMeters(userLocation.lat, userLocation.lon, suggestion.lat, suggestion.lon))
+                      : null;
+
+                    return (
+                      <li className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2" key={suggestion.id}>
+                        <p className="font-semibold text-slate-900">
+                          {suggestion.name} {suggestion.votes ? `(${suggestion.votes})` : ""}
+                        </p>
+                        <p className="mt-1 text-sm text-[var(--muted)]">{suggestion.address}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">
+                          {SUGGESTED_CATEGORY_LABELS[suggestion.category]} {meters !== null ? `| ${meters} m` : ""}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
             </section>
 
-            <CommunityPanel
-              onShowOnMap={handleToggleSuggestionVisibility}
-              onSupport={supportCommunityPlace}
-              places={communityPlaces}
-              visibleIds={visibleSuggestionIds}
-            />
+            <CommunityPanel onSupport={supportCommunityPlace} places={communityPlaces} />
 
             <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-3 shadow-[var(--shadow)]">
               <div className="mb-3 flex items-center justify-between px-1 pt-1">
