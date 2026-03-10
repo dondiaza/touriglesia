@@ -119,4 +119,34 @@ export type SuggestedPlace = {
   lon: number;
   address?: string;
   description?: string;
+  votes?: number;
+  isCommunity?: boolean;
+};
+
+export type SearchBias = {
+  lat: number;
+  lon: number;
+  radiusKm?: number;
+  bounded?: boolean;
+  countryCode?: string;
+};
+
+export type UserLocation = {
+  lat: number;
+  lon: number;
+  areaLabel?: string;
+  countryCode?: string;
+  syncedAt: string;
+};
+
+export type CommunityPlace = {
+  id: string;
+  name: string;
+  category: SuggestedPlaceCategory;
+  lat: number;
+  lon: number;
+  address?: string;
+  description?: string;
+  votes: number;
+  createdAt: string;
 };
