@@ -14,7 +14,7 @@ export default async function LoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md rounded-[28px] border border-[var(--panel-border)] bg-[var(--panel-bg)] p-6 shadow-[var(--shadow)] backdrop-blur">
+      <div className="w-full max-w-md rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-6 shadow-[var(--shadow)]">
         <div className="mb-8">
           <p className="mb-3 text-sm font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
             TourIglesia
@@ -28,7 +28,7 @@ export default async function LoginPage() {
           </p>
         </div>
 
-        <div className="mb-6 rounded-2xl border border-[var(--panel-border)] bg-white/70 p-4 text-sm text-slate-700">
+        <div className="mb-6 rounded-2xl border border-[var(--panel-border)] bg-slate-50 p-4 text-sm text-slate-700">
           <p>
             Usuario: <span className="font-semibold">{DEMO_USERNAME}</span>
           </p>
