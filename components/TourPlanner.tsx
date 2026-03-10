@@ -154,30 +154,38 @@ export default function TourPlanner() {
   return (
     <main className="px-4 py-4 lg:px-6 lg:py-6">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-4 rounded-[28px] border border-[var(--panel-border)] bg-[var(--panel-bg)] p-5 shadow-[var(--shadow)] backdrop-blur">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <header className="mb-4 rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-5 shadow-[var(--shadow)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
                 TourIglesia
               </p>
               <h1 className="mt-2 font-display text-3xl font-semibold text-slate-900">
-                Recorridos andando para hasta 25 puntos
+                Planificador de recorrido andando
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-                Busca ubicaciones, anadelas desde el mapa y genera una ruta practica con OSRM,
-                nearest neighbor y mejora local 2-opt.
+                Anade hasta 25 puntos, genera un orden eficiente para ir a pie y revisa el mapa
+                junto al detalle completo de cada tramo.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="rounded-full bg-white/80 px-4 py-2 text-sm font-medium text-slate-700">
-                Puntos: {points.length}/{MAX_POINTS}
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                  Puntos
+                </p>
+                <p className="mt-1 text-xl font-semibold text-slate-900">
+                  {points.length}/{MAX_POINTS}
+                </p>
               </div>
-              <div className="rounded-full bg-white/80 px-4 py-2 text-sm font-medium text-slate-700">
-                {totals}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                  Estado
+                </p>
+                <p className="mt-1 text-sm font-medium text-slate-900">{totals}</p>
               </div>
               <button
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
                 onClick={handleLogout}
                 type="button"
               >
@@ -191,14 +199,17 @@ export default function TourPlanner() {
           <aside className="space-y-4">
             <SearchBox disabled={points.length >= MAX_POINTS} onAddResult={handleAddSearchResult} />
 
-            <section className="rounded-[24px] border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)] backdrop-blur">
+            <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
               <div className="mb-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
                   Acciones
                 </p>
                 <h2 className="mt-2 font-display text-xl font-semibold text-slate-900">
-                  Gestion de recorrido
+                  Acciones rapidas
                 </h2>
+                <p className="mt-2 text-sm text-[var(--muted)]">
+                  Genera la ruta, carga el ejemplo demo o limpia el recorrido actual.
+                </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -255,7 +266,18 @@ export default function TourPlanner() {
             <RouteSummary points={points} routeSummary={routeSummary} />
           </aside>
 
-          <section>
+          <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-3 shadow-[var(--shadow)]">
+            <div className="mb-3 flex items-center justify-between px-1 pt-1">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
+                  Mapa
+                </p>
+                <h2 className="mt-1 font-display text-lg font-semibold text-slate-900">
+                  Vista del recorrido
+                </h2>
+              </div>
+              <p className="text-sm text-[var(--muted)]">Click para anadir puntos</p>
+            </div>
             <MapView
               mapFocus={mapFocus}
               onMapClick={handleMapClick}
