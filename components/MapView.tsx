@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 
-import type { MapFocus, MapPoint, SuggestedPlace } from "@/lib/types";
+import type { MapFocus, MapPoint, SuggestedPlace, UserLocation } from "@/lib/types";
 
 type MapViewProps = {
   points: MapPoint[];
@@ -10,6 +10,7 @@ type MapViewProps = {
   routeGeometry: Array<[number, number]>;
   isResolvingMapPoint?: boolean;
   suggestionPoints?: SuggestedPlace[];
+  userLocation?: UserLocation | null;
   onAddSuggestionToRoute?: (suggestedPlace: SuggestedPlace) => void;
   onRemovePoint?: (pointId: string) => void;
   onMapClick: (lat: number, lon: number) => void;
