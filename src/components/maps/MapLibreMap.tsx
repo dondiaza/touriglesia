@@ -1,7 +1,7 @@
 "use client";
 
 import maplibregl from "maplibre-gl";
-import Map, { Marker, NavigationControl } from "react-map-gl/maplibre";
+import Map, { Marker, NavigationControl } from "react-map-gl";
 
 import {
   DEFAULT_MAP_CENTER,
