@@ -14,6 +14,7 @@ import type {
   MapFocus,
   MapPoint,
   OrderedStop,
+  PersistedTourState,
   PointDraft,
   RouteHistoryEntry,
   RouteSummary,
@@ -43,6 +44,37 @@ type ShareCommunityPlaceInput = {
   description?: string;
   category?: SuggestedPlaceCategory;
 };
+
+function getNextPointOrder(points: MapPoint[], current: number) {
+  const maxOrder = points.reduce((max, point) => Math.max(max, point.createdOrder), 0);
+  return Math.max(current, maxOrder + 1, 1);
+}
+
+function sanitizePersistedState(snapshot: PersistedTourState): PersistedTourState {
+  const points = Array.isArray(snapshot.points) ? snapshot.points : [];
+  const orderedStops = Array.isArray(snapshot.orderedStops) ? snapshot.orderedStops : [];
+  const routeHistory = Array.isArray(snapshot.routeHistory) ? snapshot.routeHistory : [];
+  const communityPlaces = Array.isArray(snapshot.communityPlaces) ? snapshot.communityPlaces : [];
+  const activeStopIndex = Number.isFinite(snapshot.activeStopIndex) ? snapshot.activeStopIndex : 0;
+  const nextPointOrder = Number.isFinite(snapshot.nextPointOrder) ? snapshot.nextPointOrder : 1;
+
+  return {
+    points,
+    orderedStops,
+    routeSummary: snapshot.routeSummary
+      ? {
+          ...snapshot.routeSummary,
+          travelMode: "walking"
+        }
+      : null,
+    routeHistory,
+    travelMode: "walking",
+    userLocation: snapshot.userLocation ?? null,
+    communityPlaces,
+    activeStopIndex: Math.max(0, Math.trunc(activeStopIndex)),
+    nextPointOrder: getNextPointOrder(points, Math.max(1, Math.trunc(nextPointOrder)))
+  };
+}
 
 type TourState = {
   points: MapPoint[];
@@ -79,6 +111,7 @@ type TourState = {
   restoreRouteFromHistory: (id: string) => void;
   shareCommunityPlace: (input: ShareCommunityPlaceInput) => void;
   supportCommunityPlace: (id: string) => void;
+  hydratePersistedState: (snapshot: PersistedTourState) => void;
 };
 
 export const useTourStore = create<TourState>()(
@@ -380,22 +413,76 @@ export const useTourStore = create<TourState>()(
             )
             .sort((left, right) => right.votes - left.votes)
         }));
+      },
+
+      hydratePersistedState(snapshot) {
+        const sanitized = sanitizePersistedState(snapshot);
+        const pointsWithRoute =
+          sanitized.routeSummary && sanitized.orderedStops.length > 0
+            ? applyStopsToPoints(sanitized.points, sanitized.orderedStops)
+            : sanitized.points.map(stripRouteMetadata);
+        const firstPoint = sortPointsForDisplay(pointsWithRoute)[0];
+
+        set((state) => ({
+          points: pointsWithRoute,
+          orderedStops: sanitized.orderedStops,
+          routeSummary: sanitized.routeSummary,
+          routeHistory: sanitized.routeHistory,
+          travelMode: "walking",
+          userLocation: sanitized.userLocation,
+          communityPlaces: sanitized.communityPlaces,
+          activeStopIndex: sanitized.activeStopIndex,
+          nextPointOrder: getNextPointOrder(pointsWithRoute, sanitized.nextPointOrder),
+          mapFocus: firstPoint
+            ? buildFocusTarget(firstPoint.lat, firstPoint.lon)
+            : sanitized.userLocation
+              ? buildFocusTarget(sanitized.userLocation.lat, sanitized.userLocation.lon, 14)
+              : state.mapFocus,
+          notice: null
+        }));
       }
     }),
     {
       name: "touriglesia-store",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        points: state.points,
+        orderedStops: state.orderedStops,
+        routeSummary: state.routeSummary,
         routeHistory: state.routeHistory,
         travelMode: state.travelMode,
         userLocation: state.userLocation,
-        communityPlaces: state.communityPlaces
+        communityPlaces: state.communityPlaces,
+        activeStopIndex: state.activeStopIndex,
+        nextPointOrder: state.nextPointOrder
       }),
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...(persistedState as Partial<TourState>),
-        travelMode: "walking"
-      })
+      merge: (persistedState, currentState) => {
+        const partialState = (persistedState as Partial<TourState>) || {};
+        const merged = {
+          ...currentState,
+          ...partialState,
+          travelMode: "walking" as TravelMode
+        };
+
+        return {
+          ...merged,
+          points: Array.isArray(merged.points) ? merged.points : [],
+          orderedStops: Array.isArray(merged.orderedStops) ? merged.orderedStops : [],
+          routeSummary: merged.routeSummary
+            ? {
+                ...merged.routeSummary,
+                travelMode: "walking"
+              }
+            : null,
+          routeHistory: Array.isArray(merged.routeHistory) ? merged.routeHistory : [],
+          communityPlaces: Array.isArray(merged.communityPlaces) ? merged.communityPlaces : [],
+          activeStopIndex: Number.isFinite(merged.activeStopIndex) ? merged.activeStopIndex : 0,
+          nextPointOrder: getNextPointOrder(
+            Array.isArray(merged.points) ? merged.points : [],
+            Number.isFinite(merged.nextPointOrder) ? merged.nextPointOrder : 1
+          )
+        };
+      }
     }
   )
 );
