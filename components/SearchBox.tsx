@@ -4,15 +4,22 @@ import { startTransition, useEffect, useState } from "react";
 
 import { SACRED_SEARCH_PRESETS, SEARCH_DEBOUNCE_MS } from "@/lib/constants";
 import { searchLocations } from "@/lib/geo";
-import type { SearchResult } from "@/lib/types";
+import type { SearchBias, SearchResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type SearchBoxProps = {
   disabled?: boolean;
+  searchBias?: SearchBias | null;
+  defaultAreaLabel?: string;
   onAddResult: (result: SearchResult) => Promise<void> | void;
 };
 
-export default function SearchBox({ disabled = false, onAddResult }: SearchBoxProps) {
+export default function SearchBox({
+  disabled = false,
+  searchBias = null,
+  defaultAreaLabel,
+  onAddResult
+}: SearchBoxProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +41,9 @@ export default function SearchBox({ disabled = false, onAddResult }: SearchBoxPr
       setIsLoading(true);
 
       try {
-        const nextResults = await searchLocations(normalized);
+        const nextResults = await searchLocations(normalized, 6, {
+          bias: searchBias
+        });
 
         if (!isActive) {
           return;
@@ -69,7 +78,7 @@ export default function SearchBox({ disabled = false, onAddResult }: SearchBoxPr
       isActive = false;
       window.clearTimeout(timeoutId);
     };
-  }, [query]);
+  }, [query, searchBias]);
 
   async function handleAdd(result: SearchResult) {
     setIsAdding(true);
@@ -85,13 +94,8 @@ export default function SearchBox({ disabled = false, onAddResult }: SearchBoxPr
   }
 
   function handlePresetClick(preset: string) {
-    const normalized = query.trim();
-    const nextQuery = normalized
-      ? normalized.toLowerCase().startsWith(preset.toLowerCase())
-        ? normalized
-        : `${preset} ${normalized}`
-      : `${preset} Sevilla`;
-
+    const locationHint = defaultAreaLabel?.trim();
+    const nextQuery = locationHint ? `${preset} ${locationHint}` : preset;
     setQuery(nextQuery);
   }
 
@@ -112,8 +116,7 @@ export default function SearchBox({ disabled = false, onAddResult }: SearchBoxPr
         </p>
         <h2 className="text-xl font-semibold text-slate-900">Autocompletar de puntos</h2>
         <p className="text-sm leading-6 text-[var(--muted)]">
-          Prioriza iglesias, parroquias, hermandades y capillas. Pulsa Enter para anadir el
-          primer resultado.
+          Prioriza iglesias, parroquias, hermandades y capillas en tu zona actual.
         </p>
       </div>
 
@@ -138,14 +141,13 @@ export default function SearchBox({ disabled = false, onAddResult }: SearchBoxPr
           disabled={disabled || isAdding}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleEnterShortcut}
-          placeholder="Ejemplo: Iglesia del Salvador, Sevilla"
+          placeholder={defaultAreaLabel ? `Ejemplo: Iglesia en ${defaultAreaLabel}` : "Ejemplo: Iglesia del Salvador"}
           value={query}
         />
       </label>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        El buscador mezcla una consulta normal y otra sesgada al ambito cofrade para mostrar
-        primero resultados eclesiasticos.
+        Los atajos reemplazan la consulta actual y priorizan resultados de tu area sincronizada.
       </p>
 
       {isLoading ? (
@@ -162,8 +164,8 @@ export default function SearchBox({ disabled = false, onAddResult }: SearchBoxPr
 
       {query.trim().length >= 3 && results.length === 0 && !isLoading && !error ? (
         <p className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white/70 px-3 py-3 text-sm text-[var(--muted)]">
-          No hay coincidencias todavia. Prueba con un nombre mas concreto o usa un atajo como
-          Iglesia, Parroquia o Hermandad.
+          No hay coincidencias todavia. Prueba con un nombre mas concreto o usa un atajo de
+          categoria.
         </p>
       ) : null}
 
