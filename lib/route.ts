@@ -53,6 +53,16 @@ type OsrmRouteResponse = {
   message?: string;
 };
 
+type OsrmTripWaypoint = {
+  waypoint_index?: number;
+};
+
+type OsrmTripResponse = {
+  code: string;
+  waypoints?: OsrmTripWaypoint[];
+  message?: string;
+};
+
 type RouteFetchResult = {
   geometry: LatLngTuple[];
   legs: OsrmRouteLeg[];
@@ -158,6 +168,55 @@ export async function fetchFullWalkingRoute(orderedPoints: MapPoint[]) {
   return fetchFullRoute(orderedPoints, "walking");
 }
 
+export async function fetchTripOptimizedOrder(
+  points: MapPoint[],
+  travelMode: TravelMode = DEFAULT_TRAVEL_MODE
+): Promise<number[] | null> {
+  if (points.length < 3) {
+    return null;
+  }
+
+  const profile = getOsrmProfile(travelMode);
+  const coordinateString = buildCoordinateString(points);
+  const url = `${OSRM_BASE_URL}/trip/v1/${profile}/${coordinateString}?roundtrip=false&source=any&destination=any`;
+  const response = await fetch(url, {
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = (await response.json()) as OsrmTripResponse;
+
+  if (data.code !== "Ok" || !data.waypoints || data.waypoints.length !== points.length) {
+    return null;
+  }
+
+  const order = new Array<number>(points.length).fill(-1);
+
+  for (let originalIndex = 0; originalIndex < data.waypoints.length; originalIndex += 1) {
+    const waypointIndex = data.waypoints[originalIndex]?.waypoint_index;
+
+    if (
+      typeof waypointIndex !== "number" ||
+      waypointIndex < 0 ||
+      waypointIndex >= points.length ||
+      order[waypointIndex] !== -1
+    ) {
+      return null;
+    }
+
+    order[waypointIndex] = originalIndex;
+  }
+
+  if (order.some((value) => value < 0)) {
+    return null;
+  }
+
+  return order;
+}
+
 export function computeLegSummaries(
   orderedPoints: MapPoint[],
   routeLegs?: OsrmRouteLeg[],
@@ -259,7 +318,7 @@ async function fetchRouteChunk(
 ): Promise<RouteFetchResult> {
   const coordinateString = buildCoordinateString(points);
   const profile = getOsrmProfile(travelMode);
-  const url = `${OSRM_BASE_URL}/route/v1/${profile}/${coordinateString}?overview=full&geometries=geojson&steps=true`;
+  const url = `${OSRM_BASE_URL}/route/v1/${profile}/${coordinateString}?overview=full&geometries=geojson&steps=true&continue_straight=false`;
   const response = await fetch(url, {
     cache: "no-store"
   });
