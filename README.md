@@ -109,7 +109,7 @@ app/
 - En modo a pie, la optimizacion prioriza distancia total (tramo mas corto posible entre puntos)
 - Reordenacion manual por drag and drop (desktop + mobile)
 - Al regenerar tras reordenar manualmente, se respeta exactamente el orden establecido
-- Historico local de rutas creadas y reajustadas en una pestana dedicada
+- Rutas guardadas en una pestana dedicada, con guardado manual por nombre de ruta y usuario
 - Sugerencias clave sobre el mapa (iglesias, interes cofrade y cervecerias) con seleccion y anadido a ruta
 - Checks por categoria para mostrar en bloque sugerencias cercanas (radio 200 m desde geolocalizacion)
 - Eliminacion de puntos directamente desde la ficha del marcador en el mapa
@@ -139,12 +139,12 @@ app/
 
 La heuristica busca un recorrido practico y rapido de calcular. No garantiza el TSP matematicamente optimo absoluto.
 
-## Historico y persistencia
+## Rutas guardadas y persistencia
 
-- El historico de rutas se guarda en `localStorage` usando Zustand persist.
+- Las rutas guardadas se almacenan en `localStorage` usando Zustand persist.
+- El guardado es manual: tras generar una ruta, pulsa "Guardar ruta" e indica nombre de ruta y usuario.
 - Tambien se persisten en local `userLocation` (ultima zona sincronizada) y `communityPlaces`.
-- La ruta actual no se persiste completa como sesion de trabajo; el historico sirve como recuperacion rapida.
-- Cada reordenacion manual genera una nueva entrada en el historico.
+- La ruta actual no se persiste completa como sesion de trabajo; las rutas guardadas sirven como recuperacion rapida.
 
 ## Sugerencias diarias
 
