@@ -320,7 +320,7 @@ export const useTourStore = create<TourState>()(
           activeStopIndex: 0,
           travelMode: restoredTravelMode,
           mapFocus: firstPoint ? buildFocusTarget(firstPoint.lat, firstPoint.lon) : null,
-          notice: "Ruta recuperada desde el historico.",
+          notice: "Ruta recuperada desde Rutas guardadas.",
           nextPointOrder
         });
       },
