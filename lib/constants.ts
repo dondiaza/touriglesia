@@ -16,8 +16,21 @@ export const DEFAULT_FOCUS_ZOOM = 16;
 export const SEVILLE_CENTER: LatLngTuple = [37.3891, -5.9845];
 
 export const NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
-export const OSRM_BASE_URL = "https://router.project-osrm.org";
+export const OSRM_WALKING_BASE_URL =
+  process.env.NEXT_PUBLIC_OSRM_WALKING_BASE_URL || "https://routing.openstreetmap.de/routed-foot";
+export const OSRM_WALKING_PROFILE =
+  process.env.NEXT_PUBLIC_OSRM_WALKING_PROFILE || "driving";
+export const OSRM_WALKING_FALLBACK_BASE_URL =
+  process.env.NEXT_PUBLIC_OSRM_WALKING_FALLBACK_BASE_URL || "https://router.project-osrm.org";
+export const OSRM_WALKING_FALLBACK_PROFILE =
+  process.env.NEXT_PUBLIC_OSRM_WALKING_FALLBACK_PROFILE || "foot";
+export const OSRM_DRIVING_BASE_URL =
+  process.env.NEXT_PUBLIC_OSRM_DRIVING_BASE_URL || "https://router.project-osrm.org";
+export const OSRM_DRIVING_PROFILE =
+  process.env.NEXT_PUBLIC_OSRM_DRIVING_PROFILE || "driving";
 export const OSRM_ROUTE_CHUNK_SIZE = 10;
+export const OSRM_WALKING_MAX_PARALLEL_SEGMENTS = 6;
+export const OSRM_WALKING_LEG_BY_LEG_MAX_POINTS = 10;
 export const GDELT_BASE_URL = "https://api.gdeltproject.org/api/v2/doc/doc";
 
 export const SACRED_SEARCH_PRESETS = [
