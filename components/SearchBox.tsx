@@ -84,14 +84,17 @@ export default function SearchBox({ disabled = false, onAddResult }: SearchBoxPr
   }
 
   return (
-    <section className="rounded-[24px] border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)] backdrop-blur">
+    <section className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 shadow-[var(--shadow)]">
       <div className="mb-3">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
           Busqueda
         </p>
         <h2 className="mt-2 font-display text-xl font-semibold text-slate-900">
-          Anade puntos desde texto
+          Buscar ubicacion
         </h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">
+          Busca una iglesia, direccion o punto de interes y anadelo al recorrido.
+        </p>
       </div>
 
       <label className="block">
@@ -124,10 +127,7 @@ export default function SearchBox({ disabled = false, onAddResult }: SearchBoxPr
       {results.length > 0 ? (
         <ul className="tour-scrollbar mt-4 max-h-72 space-y-3 overflow-y-auto pr-1">
           {results.map((result) => (
-            <li
-              className="rounded-2xl border border-slate-200 bg-white/80 p-3"
-              key={result.id}
-            >
+            <li className="rounded-2xl border border-slate-200 bg-slate-50 p-3" key={result.id}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-900">{result.name}</p>
