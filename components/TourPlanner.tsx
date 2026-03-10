@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import CommunityPanel from "@/components/CommunityPanel";
@@ -11,7 +11,7 @@ import RouteSummary from "@/components/RouteSummary";
 import SearchBox from "@/components/SearchBox";
 import SuggestionsPanel from "@/components/SuggestionsPanel";
 import { clearAuthCookie } from "@/lib/auth";
-import { MAX_POINTS } from "@/lib/constants";
+import { MAX_POINTS, SEVILLE_CENTER } from "@/lib/constants";
 import { normalizeUserError } from "@/lib/errors";
 import {
   buildMapPointDraftFromReverse,
@@ -25,7 +25,8 @@ import {
   generateOptimizedRoute,
   rebuildRouteFromManualOrder
 } from "@/lib/planner";
-import type { MapPoint, SearchBias, SearchResult, SuggestedPlace } from "@/lib/types";
+import { fetchPersistedTourState, savePersistedTourState } from "@/lib/statePersistence";
+import type { MapPoint, PersistedTourState, SearchBias, SearchResult, SuggestedPlace } from "@/lib/types";
 import { cn, formatDistance, formatDuration, formatTravelMode, haversineMeters } from "@/lib/utils";
 import { useTourStore } from "@/store/useTourStore";
 
@@ -95,9 +96,11 @@ export default function TourPlanner() {
   const orderedStops = useTourStore((state) => state.orderedStops);
   const routeSummary = useTourStore((state) => state.routeSummary);
   const routeHistory = useTourStore((state) => state.routeHistory);
+  const travelMode = useTourStore((state) => state.travelMode);
   const userLocation = useTourStore((state) => state.userLocation);
   const communityPlaces = useTourStore((state) => state.communityPlaces);
   const activeStopIndex = useTourStore((state) => state.activeStopIndex);
+  const nextPointOrder = useTourStore((state) => state.nextPointOrder);
   const mapFocus = useTourStore((state) => state.mapFocus);
   const notice = useTourStore((state) => state.notice);
   const addPoint = useTourStore((state) => state.addPoint);
@@ -117,6 +120,7 @@ export default function TourPlanner() {
   const saveRouteToHistory = useTourStore((state) => state.saveRouteToHistory);
   const restoreRouteFromHistory = useTourStore((state) => state.restoreRouteFromHistory);
   const removeHistoryEntry = useTourStore((state) => state.removeHistoryEntry);
+  const hydratePersistedState = useTourStore((state) => state.hydratePersistedState);
 
   const [activeTab, setActiveTab] = useState<SideTab>("planner");
   const [enabledSuggestionCategories, setEnabledSuggestionCategories] = useState<
@@ -132,6 +136,10 @@ export default function TourPlanner() {
   const [isResolvingClick, setIsResolvingClick] = useState(false);
   const [manualPointOrder, setManualPointOrder] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isRemoteStateReady, setIsRemoteStateReady] = useState(false);
+  const hasSyncErrorNoticeRef = useRef(false);
+  const isRemoteSyncDisabledRef = useRef(false);
+  const lastSyncedSnapshotRef = useRef<string | null>(null);
   const reverseLookupRef = useRef<{
     lat: number;
     lon: number;
@@ -224,6 +232,119 @@ export default function TourPlanner() {
       navigator.geolocation.clearWatch(watchId);
     };
   }, [setNotice, setUserLocation]);
+
+  const persistedSnapshot = useMemo<PersistedTourState>(
+    () => ({
+      points,
+      orderedStops,
+      routeSummary,
+      routeHistory,
+      travelMode,
+      userLocation,
+      communityPlaces,
+      activeStopIndex,
+      nextPointOrder
+    }),
+    [
+      activeStopIndex,
+      communityPlaces,
+      nextPointOrder,
+      orderedStops,
+      points,
+      routeHistory,
+      routeSummary,
+      travelMode,
+      userLocation
+    ]
+  );
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadRemoteState() {
+      try {
+        const remoteSnapshot = await fetchPersistedTourState();
+
+        if (ignore) {
+          return;
+        }
+
+        if (remoteSnapshot) {
+          hydratePersistedState(remoteSnapshot);
+          lastSyncedSnapshotRef.current = JSON.stringify(remoteSnapshot);
+        }
+      } catch (requestError) {
+        if (ignore) {
+          return;
+        }
+
+        const message = normalizeUserError(
+          requestError,
+          "No se pudo sincronizar el estado persistente.",
+          "No se pudo conectar con la base de datos para cargar tus datos."
+        );
+
+        if (message.toLowerCase().includes("persistencia remota no configurada")) {
+          isRemoteSyncDisabledRef.current = true;
+        }
+
+        setNotice(message);
+      } finally {
+        if (!ignore) {
+          setIsRemoteStateReady(true);
+        }
+      }
+    }
+
+    void loadRemoteState();
+
+    return () => {
+      ignore = true;
+    };
+  }, [hydratePersistedState, setNotice]);
+
+  useEffect(() => {
+    if (!isRemoteStateReady || isRemoteSyncDisabledRef.current) {
+      return;
+    }
+
+    const serializedSnapshot = JSON.stringify(persistedSnapshot);
+
+    if (lastSyncedSnapshotRef.current === serializedSnapshot) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          await savePersistedTourState(persistedSnapshot);
+          lastSyncedSnapshotRef.current = serializedSnapshot;
+          hasSyncErrorNoticeRef.current = false;
+        } catch (saveError) {
+          const message = normalizeUserError(
+            saveError,
+            "No se pudo sincronizar cambios en la base de datos.",
+            "No se pudo guardar los cambios en la base de datos."
+          );
+
+          if (message.toLowerCase().includes("persistencia remota no configurada")) {
+            isRemoteSyncDisabledRef.current = true;
+          }
+
+          if (hasSyncErrorNoticeRef.current) {
+            return;
+          }
+
+          hasSyncErrorNoticeRef.current = true;
+          setNotice(message);
+        }
+      })();
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isRemoteStateReady, persistedSnapshot, setNotice]);
 
   useEffect(() => {
     if (!routeSummary) {
@@ -601,15 +722,21 @@ export default function TourPlanner() {
     ? `${formatTravelMode(routeSummary.travelMode)} | ${formatDistance(routeSummary.totalDistanceMeters)} | ${formatDuration(routeSummary.totalDurationSeconds)}`
     : "Sin ruta generada";
 
-  const searchBias: SearchBias | null = userLocation
+  const searchBias: SearchBias = userLocation
     ? {
         lat: userLocation.lat,
         lon: userLocation.lon,
         radiusKm: 12,
         bounded: true,
-        countryCode: userLocation.countryCode
+        countryCode: userLocation.countryCode || "ES"
       }
-    : null;
+    : {
+        lat: SEVILLE_CENTER[0],
+        lon: SEVILLE_CENTER[1],
+        radiusKm: 10,
+        bounded: true,
+        countryCode: "ES"
+      };
 
   return (
     <main className="px-4 py-4 lg:px-6 lg:py-6">
@@ -624,8 +751,9 @@ export default function TourPlanner() {
                 Rutas cofrades y eclesiasticas
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-                Busca puntos en tu zona, anadelos con confirmacion, marca llegadas y descubre
-                sitios cercanos y compartidos por la comunidad.
+                Busca puntos cofrades en tu zona, con prioridad Sevilla cuando no haya
+                geolocalizacion, anadelos con confirmacion, marca llegadas y descubre sitios
+                cercanos compartidos por la comunidad.
               </p>
             </div>
 
@@ -703,7 +831,7 @@ export default function TourPlanner() {
             {activeTab === "planner" ? (
               <>
                 <SearchBox
-                  defaultAreaLabel={userLocation?.areaLabel}
+                  defaultAreaLabel={userLocation?.areaLabel || "Sevilla"}
                   disabled={points.length >= MAX_POINTS || isBusy}
                   onAddResult={handleAddSearchResult}
                   searchBias={searchBias}
@@ -812,7 +940,7 @@ export default function TourPlanner() {
                   Iglesias, interes cofrade y cervecerias
                 </h2>
                 <p className="text-sm leading-6 text-[var(--muted)]">
-                  Activa checks por categoria para mostrar en el mapa todos los puntos cercanos
+                  Activa casillas por categoria para mostrar en el mapa todos los puntos cercanos
                   (200 m a la redonda) de tu zona geolocalizada.
                 </p>
               </div>
@@ -888,7 +1016,9 @@ export default function TourPlanner() {
                   </p>
                   <h2 className="mt-1 text-lg font-semibold text-slate-900">Vista del recorrido</h2>
                 </div>
-                <p className="text-sm text-[var(--muted)]">Click/touch para anadir y arrastrar marcador para mover punto</p>
+                <p className="text-sm text-[var(--muted)]">
+                  Toca o haz clic para anadir y arrastra el marcador para mover el punto
+                </p>
               </div>
               <MapView
                 isResolvingMapPoint={isResolvingClick}
